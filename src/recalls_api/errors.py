@@ -1,0 +1,102 @@
+"""Error taxonomy + handlers. Every non-2xx body is the same envelope:
+
+    {"error": {"type": <ApiError subtype>, "detail": <human message>, "request_id": <uuid>}}
+
+The catch-all logs the full traceback and returns an OPAQUE body — it never leaks SQL/DSN/exception
+text to the client.
+"""
+
+from __future__ import annotations
+
+import structlog
+from fastapi import FastAPI, Request, status
+from fastapi.responses import JSONResponse
+from sqlalchemy.exc import DBAPIError, OperationalError
+
+from recalls_api.logging import get_request_id
+
+log = structlog.get_logger(__name__)
+
+
+class ApiError(Exception):
+    """Base for every API-raised error. Subclasses set ``status_code`` + ``error_type``."""
+
+    status_code: int = status.HTTP_500_INTERNAL_SERVER_ERROR
+    error_type: str = "internal_error"
+
+    def __init__(self, detail: str) -> None:
+        super().__init__(detail)
+        self.detail = detail
+
+
+class ResourceNotFound(ApiError):
+    status_code = status.HTTP_404_NOT_FOUND
+    error_type = "not_found"
+
+
+class InvalidParameter(ApiError):
+    status_code = status.HTTP_422_UNPROCESSABLE_CONTENT  # 422 (Starlette renamed from _ENTITY)
+    error_type = "invalid_parameter"
+
+
+class BadCursor(ApiError):
+    status_code = status.HTTP_400_BAD_REQUEST
+    error_type = "bad_cursor"
+
+
+class UpstreamUnavailable(ApiError):
+    status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+    error_type = "upstream_unavailable"
+
+
+class RateLimited(ApiError):
+    status_code = status.HTTP_429_TOO_MANY_REQUESTS
+    error_type = "rate_limited"
+
+
+def _envelope(
+    error_type: str,
+    detail: str,
+    status_code: int,
+    headers: dict[str, str] | None = None,
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=status_code,
+        content={"error": {"type": error_type, "detail": detail, "request_id": get_request_id()}},
+        headers=headers,
+    )
+
+
+async def _api_error_handler(_: Request, exc: ApiError) -> JSONResponse:
+    # 503 (cold DB) and 429 (rate limit) are retry-friendly.
+    headers = {"Retry-After": "5"} if isinstance(exc, UpstreamUnavailable | RateLimited) else None
+    return _envelope(exc.error_type, exc.detail, exc.status_code, headers)
+
+
+async def _db_error_handler(_: Request, exc: Exception) -> JSONResponse:
+    # Cold / asleep / timed-out Neon -> 503; never leak the SQLAlchemy/asyncpg message.
+    log.warning("db.upstream_unavailable", error=str(exc))
+    return _envelope(
+        "upstream_unavailable",
+        "database temporarily unavailable",
+        status.HTTP_503_SERVICE_UNAVAILABLE,
+        {"Retry-After": "5"},
+    )
+
+
+async def _catch_all_handler(_: Request, exc: Exception) -> JSONResponse:
+    # Full traceback to logs; OPAQUE body to the client. Never leak SQL/DSN/exception text.
+    log.error("unhandled_exception", exc_info=exc)
+    return _envelope(
+        "internal_error",
+        "an unexpected error occurred",
+        status.HTTP_500_INTERNAL_SERVER_ERROR,
+    )
+
+
+def register_error_handlers(app: FastAPI) -> None:
+    """Wire the handlers. One ApiError handler covers all subtypes (FastAPI matches by MRO)."""
+    app.add_exception_handler(ApiError, _api_error_handler)  # type: ignore[arg-type]
+    app.add_exception_handler(OperationalError, _db_error_handler)
+    app.add_exception_handler(DBAPIError, _db_error_handler)
+    app.add_exception_handler(Exception, _catch_all_handler)  # last resort
