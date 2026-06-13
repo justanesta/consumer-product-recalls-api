@@ -4,35 +4,30 @@ from __future__ import annotations
 
 from typing import Annotated
 
-import structlog
-from fastapi import APIRouter, Depends, Response, status
-from sqlalchemy.exc import DBAPIError, OperationalError
+from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncConnection
 
-from recalls_api import deps
+from recalls_api import __version__, deps
 from recalls_api.db import healthcheck
+from recalls_api.errors import ERR_503
+from recalls_api.models.common import DbHealth, Health
 
 router = APIRouter(tags=["ops"])
-log = structlog.get_logger(__name__)
 
 
-@router.get("/health")
-async def health() -> dict[str, str]:
+@router.get("/health", response_model=Health, summary="Liveness probe (no DB touch).")
+async def health() -> Health:
     """Liveness: process is up. No DB touch, so the Docker/Fly probe never wakes Neon."""
-    return {"status": "ok"}
+    return Health(version=__version__)
 
 
-@router.get("/health/db")
-async def health_db(
-    conn: Annotated[AsyncConnection, Depends(deps.get_conn)],
-    response: Response,
-) -> dict[str, str]:
-    """Readiness: a SELECT 1 to Neon. Cold/asleep Neon -> 503 + Retry-After, never hang."""
-    try:
-        ok = await healthcheck(conn)
-    except (OperationalError, DBAPIError, TimeoutError) as exc:
-        log.warning("health.db_unavailable", error=str(exc))
-        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
-        response.headers["Retry-After"] = "5"
-        return {"status": "degraded", "db": "unavailable"}
-    return {"status": "ok", "db": "ok" if ok else "unexpected"}
+@router.get(
+    "/health/db",
+    response_model=DbHealth,
+    responses=ERR_503,
+    summary="Readiness probe — verifies the read-only DB connection.",
+)
+async def health_db(conn: Annotated[AsyncConnection, Depends(deps.get_conn)]) -> DbHealth:
+    """Readiness: SELECT 1 to Neon; a cold DB becomes 503 + Retry-After via the error handler."""
+    await healthcheck(conn)  # raises OperationalError/TimeoutError on a cold DB -> handled as 503
+    return DbHealth()

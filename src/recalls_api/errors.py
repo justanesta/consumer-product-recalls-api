@@ -8,9 +8,12 @@ text to the client.
 
 from __future__ import annotations
 
+from typing import Any
+
 import structlog
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
 from sqlalchemy.exc import DBAPIError, OperationalError
 
 from recalls_api.logging import get_request_id
@@ -52,6 +55,32 @@ class UpstreamUnavailable(ApiError):
 class RateLimited(ApiError):
     status_code = status.HTTP_429_TOO_MANY_REQUESTS
     error_type = "rate_limited"
+
+
+# --- The wire envelope (Pydantic models for OpenAPI) + reusable `responses=` maps ---
+
+
+class ErrorDetail(BaseModel):
+    type: str = Field(examples=["not_found"])  # the ApiError error_type
+    detail: Any = Field(examples=["No recall found for CPSC/24-001."])
+    request_id: str = Field(examples=["b1d9c6f2-3a1e-4c7e-9f0a-7d2c1e5b8a40"])
+
+
+class ErrorEnvelope(BaseModel):
+    error: ErrorDetail
+
+
+_ERR: dict[str, Any] = {"model": ErrorEnvelope}
+# Keys typed int|str: FastAPI's responses= key type is invariant (int alone is not int|str).
+ERR_400: dict[int | str, dict[str, Any]] = {400: {**_ERR, "description": "BadCursor."}}
+ERR_404: dict[int | str, dict[str, Any]] = {404: {**_ERR, "description": "ResourceNotFound."}}
+ERR_422: dict[int | str, dict[str, Any]] = {422: {**_ERR, "description": "InvalidParameter."}}
+ERR_503: dict[int | str, dict[str, Any]] = {503: {**_ERR, "description": "UpstreamUnavailable."}}
+ERR_429: dict[int | str, dict[str, Any]] = {429: {**_ERR, "description": "RateLimited."}}
+
+# Per-endpoint maps for the route `responses=` kwarg (so error shapes appear in the OpenAPI spec).
+LIST_ERRORS: dict[int | str, dict[str, Any]] = {**ERR_400, **ERR_422, **ERR_503, **ERR_429}
+ITEM_ERRORS: dict[int | str, dict[str, Any]] = {**ERR_404, **ERR_422, **ERR_503, **ERR_429}
 
 
 def _envelope(
