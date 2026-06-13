@@ -1,0 +1,50 @@
+# Pre-commit hooks for recalls-api — fine-tuned to THIS repo (an open, read-only FastAPI service over
+# the gold marts). Kept from the pipeline's config: ruff + ruff-format (lint/format), pyright (types),
+# gitleaks (this public repo must never commit the read-only Neon DSN), and uv-lock-check.
+# Dropped as not relevant here: the pipeline's `cassette-secret-scrub` (no VCR HTTP cassettes — tests
+# use a seeded SQL fixture) and `check-pydantic-strict` (no bronze `src/schemas/`; the API's response
+# models are intentionally lenient with extra="ignore", so a strict-forbid check would be wrong).
+# The `openapi-drift` guard is added in C8 (feature/api-openapi-contract) once openapi.json exists —
+# see the commented block at the bottom.
+#
+# Install once: `uv run pre-commit install`
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.16
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: local
+    hooks:
+      - id: pyright
+        name: pyright
+        entry: uv run pyright
+        language: system
+        pass_filenames: false
+        types: [python]
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks
+
+  - repo: local
+    hooks:
+      - id: uv-lock-check
+        name: Verify uv.lock matches pyproject.toml
+        entry: uv lock --check
+        language: system
+        pass_filenames: false
+        files: ^(pyproject\.toml|uv\.lock)$
+
+# --- Add in C8 once src/recalls_api/export_openapi.py + the committed openapi.json exist ---
+#  - repo: local
+#    hooks:
+#      - id: openapi-drift
+#        name: Verify committed openapi.json matches the live app
+#        entry: uv run python -m recalls_api.export_openapi --check
+#        language: system
+#        pass_filenames: false
+#        files: ^(src/recalls_api/.*\.py|openapi\.json)$
