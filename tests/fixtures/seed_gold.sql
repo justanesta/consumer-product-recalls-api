@@ -185,3 +185,67 @@ insert into mart_product_search (
 update mart_product_search set search_vector = to_tsvector('english',
     coalesce(product_name, '') || ' ' || coalesce(product_description, '') || ' ' ||
     coalesce(recall_title, '') || ' ' || coalesce(firm_name, ''));
+
+-- ---------------------------------------------------------------------------------------------------
+-- mart_firm_profile (C7). One row per canonical firm. firm_id is a 32-char md5 hex (matches the
+-- firms[].firm_id values in the recall rows). Sidecar columns carry the post-R5 names
+-- (firm_usda/uscg/fda_attributes). Covers: a CPSC firm (no sidecar), single-source firms, and a
+-- cross-source firm with two populated sidecars.
+-- ---------------------------------------------------------------------------------------------------
+
+drop table if exists mart_firm_profile;
+
+create table mart_firm_profile (
+    firm_id              text primary key,
+    canonical_name       text    not null,
+    normalized_name      text    not null,
+    observed_names       jsonb,
+    observed_company_ids jsonb,
+    alternate_names      jsonb,
+    total_recalls        bigint  not null,
+    active_recalls       bigint  not null,
+    first_recall_at      timestamptz,
+    last_recall_at       timestamptz,
+    roles                jsonb,
+    recalls_by_source    jsonb,
+    distinct_products    numeric not null,
+    firm_usda_attributes jsonb,
+    firm_uscg_attributes jsonb,
+    firm_fda_attributes  jsonb
+);
+
+create index mart_firm_profile_normalized_name on mart_firm_profile (normalized_name);
+
+insert into mart_firm_profile (
+    firm_id, canonical_name, normalized_name, observed_names, observed_company_ids, alternate_names,
+    total_recalls, active_recalls, first_recall_at, last_recall_at, roles, recalls_by_source,
+    distinct_products, firm_usda_attributes, firm_uscg_attributes, firm_fda_attributes
+) values
+-- Acme Foods Inc — FDA only, FDA sidecar populated
+('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'Acme Foods Inc', 'acme foods', '["Acme Foods Inc", "ACME FOODS"]',
+ '["1000000001"]', '["Acme"]', 2, 1, '2026-05-10 12:00:00+00', '2026-05-12 09:00:00+00',
+ '["establishment"]', '{"FDA": 2}', 3, null, null,
+ '[{"firm_fei_num": 1000000001, "firm_legal_nam": "ACME FOODS INC", "firm_city_nam": "Springfield", "firm_state_cd": "IL", "firm_country_nam": "USA"}]'),
+-- Globex Corporation — CPSC only, NO sidecar (CPSC is name-keyed)
+('11111111111111111111111111111111', 'Globex Corporation', 'globex', '["Globex Corporation"]',
+ '[]', '[]', 1, 0, '2026-06-01 10:00:00+00', '2026-06-01 10:00:00+00',
+ '["manufacturer"]', '{"CPSC": 1}', 1, null, null, null),
+-- Tyson Foods — USDA only, USDA sidecar populated
+('22222222222222222222222222222222', 'Tyson Foods', 'tyson foods', '["Tyson Foods"]',
+ '["M12345"]', '[]', 1, 0, '2026-04-15 08:00:00+00', '2026-04-15 08:00:00+00',
+ '["establishment"]', '{"USDA": 1}', 1,
+ '[{"establishment_id": "M12345", "establishment_name": "TYSON FOODS", "city": "Springdale", "state": "AR", "status_regulated_est": ""}]',
+ null, null),
+-- Boaty Mfg — USCG only, USCG sidecar populated
+('55555555555555555555555555555555', 'Boaty Mfg', 'boaty mfg', '["Boaty Mfg"]',
+ '["BMC"]', '[]', 1, 1, '2026-02-10 06:00:00+00', '2026-02-10 06:00:00+00',
+ '["manufacturer"]', '{"USCG": 1}', 1, null,
+ '[{"mic": "BMC", "company_name": "Boaty Mfg", "city": "Miami", "state": "FL", "status": "Active", "mic_has_prior_holder": false, "prior_holders": []}]',
+ null),
+-- MultiCorp — CROSS-SOURCE (FDA + USDA), two sidecars populated
+('cccccccccccccccccccccccccccccccc', 'MultiCorp LLC', 'multicorp', '["MultiCorp LLC", "Multi Corp"]',
+ '["2000000002", "M99999"]', '[]', 2, 1, '2026-01-05 09:00:00+00', '2026-03-01 09:00:00+00',
+ '["establishment"]', '{"FDA": 1, "USDA": 1}', 4,
+ '[{"establishment_id": "M99999", "establishment_name": "MULTICORP PLANT", "state": "TX"}]',
+ null,
+ '[{"firm_fei_num": 2000000002, "firm_legal_nam": "MULTICORP LLC", "firm_city_nam": "Austin", "firm_state_cd": "TX"}]');
