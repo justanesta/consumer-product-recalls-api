@@ -1,10 +1,10 @@
-# Python
+# Python (anchor build/dist to repo root so they don't match project_scope/build/ docs)
 __pycache__/
 *.py[cod]
 *.egg-info/
 .eggs/
-build/
-dist/
+/build/
+/dist/
 
 # Virtual env / uv
 .venv/
@@ -17,6 +17,10 @@ dist/
 # Local / private (not checked in)
 CLAUDE.local.md
 .claude/settings.local.json
+
+# Build-spec docs: re-include despite a broad `build/` in the user's global ~/.config/git/ignore.
+# (Git can re-include a directory excluded by a pattern as long as no PARENT dir is excluded.)
+!project_scope/build/
 
 # Tool caches / coverage
 .ruff_cache/
