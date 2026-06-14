@@ -91,3 +91,33 @@ def test_count_stmt_reuses_predicates() -> None:
     c = _compiled(q.list_count_stmt(RecallFilters(Source.USDA, None, None, None, None, None)))
     assert c.params["source"] == "USDA"
     assert "COUNT(" in str(c).upper()
+
+
+def test_distribution_scope_filter_binds_value() -> None:
+    f = RecallFilters(None, None, None, None, None, None, distribution_scope="Regional")
+    c = _compiled(q.list_stmt(f, None, 25))
+    assert c.params["dist_scope"] == "Regional"
+
+
+def test_lifecycle_status_filter_binds_value() -> None:
+    f = RecallFilters(None, None, None, None, None, None, lifecycle_status="Ongoing")
+    c = _compiled(q.list_stmt(f, None, 25))
+    assert c.params["lifecycle"] == "Ongoing"
+
+
+def test_announced_after_is_inclusive_same_day() -> None:
+    f = RecallFilters(None, None, None, None, None, None, announced_after=date(2026, 4, 15))
+    c = _compiled(q.list_stmt(f, None, 25))
+    assert c.params["ann_after"] == date(2026, 4, 15)
+
+
+def test_announced_before_is_exclusive_next_day() -> None:
+    f = RecallFilters(None, None, None, None, None, None, announced_before=date(2026, 4, 15))
+    c = _compiled(q.list_stmt(f, None, 25))
+    assert c.params["ann_before"] == date(2026, 4, 16)  # inclusive of the whole 2026-04-15
+
+
+def test_source_recall_id_filter_uses_equality() -> None:
+    f = RecallFilters(None, None, None, None, None, None, source_recall_id="F-1001")
+    c = _compiled(q.list_stmt(f, None, 25))
+    assert c.params["source_recall_id"] == "F-1001"

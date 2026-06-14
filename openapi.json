@@ -66,7 +66,7 @@
           "recalls"
         ],
         "summary": "List recalls (newest first), with filters and keyset pagination.",
-        "description": "Recalls across CPSC, FDA, USDA, NHTSA, USCG, newest first (`published_at DESC`), keyset (seek) paginated — pass the previous page's `next_cursor` back as `cursor`. Caveats: `classification` is source-native (not unified); `is_active` is tri-state, so CPSC/NHTSA (`null`) match neither `true` nor `false`; deep UNFILTERED paging is a full sort (only `(source, published_at)` is indexed) — add `?source=` for index-backed paging; `firm` is an unindexed substring convenience filter. Total is omitted unless `with_total=true`.",
+        "description": "Recalls across CPSC, FDA, USDA, NHTSA, USCG, newest first (`published_at DESC`), keyset (seek) paginated — pass the previous page's `next_cursor` back as `cursor`. Filters AND together: `source`, `classification`, `is_active`, `lifecycle_status`, `distribution_scope`, `source_recall_id`, `firm`, plus the `published_*` and `announced_*` date ranges. Caveats: `classification`/`lifecycle_status` are source-native (not unified); `is_active` and `lifecycle_status` are null for CPSC/NHTSA, so a value filter on either excludes those rows; `announced_at` is nullable, so an `announced_*` filter drops rows lacking it; `source_recall_id` is exact and unique only with `source` (use the detail route); `firm` is an unindexed substring filter. Total is omitted unless `with_total=true`.",
         "operationId": "list_recalls_recalls_get",
         "parameters": [
           {
@@ -181,6 +181,102 @@
               "title": "Firm"
             },
             "description": "Case-insensitive substring (unindexed)."
+          },
+          {
+            "name": "distribution_scope",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 64
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "EXACT match on the source-native distribution scope.",
+              "title": "Distribution Scope"
+            },
+            "description": "EXACT match on the source-native distribution scope."
+          },
+          {
+            "name": "lifecycle_status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 64
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "EXACT match; source-native, null for CPSC/NHTSA (excludes those rows).",
+              "title": "Lifecycle Status"
+            },
+            "description": "EXACT match; source-native, null for CPSC/NHTSA (excludes those rows)."
+          },
+          {
+            "name": "announced_after",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "announced_at >= start of that day (UTC); null-announced rows excluded.",
+              "title": "Announced After"
+            },
+            "description": "announced_at >= start of that day (UTC); null-announced rows excluded."
+          },
+          {
+            "name": "announced_before",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Inclusive of the whole announced_before day; nulls excluded.",
+              "title": "Announced Before"
+            },
+            "description": "Inclusive of the whole announced_before day; nulls excluded."
+          },
+          {
+            "name": "source_recall_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "EXACT agency-native id; unique only when combined with source.",
+              "title": "Source Recall Id"
+            },
+            "description": "EXACT agency-native id; unique only when combined with source."
           },
           {
             "name": "limit",
