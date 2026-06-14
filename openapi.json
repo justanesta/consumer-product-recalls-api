@@ -1,0 +1,2324 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Consumer Product Recalls API",
+    "description": "Open, read-only API over the consumer product recalls gold marts (CPSC, FDA, USDA, NHTSA, USCG). Honest caveats: `is_active` is tri-state (CPSC/NHTSA carry no status -> null); `classification` is source-native and not comparable across sources; UPC search matches recall-level UPC arrays, not per-product UPC; there is no fuzzy/typo search.",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "tags": [
+          "ops"
+        ],
+        "summary": "Liveness probe (no DB touch).",
+        "description": "Liveness: process is up. No DB touch, so the Docker/Fly probe never wakes Neon.",
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health/db": {
+      "get": {
+        "tags": [
+          "ops"
+        ],
+        "summary": "Readiness probe — verifies the read-only DB connection.",
+        "description": "Readiness: SELECT 1 to Neon; a cold DB becomes 503 + Retry-After via the error handler.",
+        "operationId": "health_db_health_db_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DbHealth"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "UpstreamUnavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/recalls": {
+      "get": {
+        "tags": [
+          "recalls"
+        ],
+        "summary": "List recalls (newest first), with filters and keyset pagination.",
+        "description": "Recalls across CPSC, FDA, USDA, NHTSA, USCG, newest first (`published_at DESC`), keyset (seek) paginated — pass the previous page's `next_cursor` back as `cursor`. Caveats: `classification` is source-native (not unified); `is_active` is tri-state, so CPSC/NHTSA (`null`) match neither `true` nor `false`; deep UNFILTERED paging is a full sort (only `(source, published_at)` is indexed) — add `?source=` for index-backed paging; `firm` is an unindexed substring convenience filter. Total is omitted unless `with_total=true`.",
+        "operationId": "list_recalls_recalls_get",
+        "parameters": [
+          {
+            "name": "source",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/Source"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by issuing agency.",
+              "title": "Source"
+            },
+            "description": "Filter by issuing agency."
+          },
+          {
+            "name": "classification",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 64
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "EXACT match on the source-native classification string.",
+              "title": "Classification"
+            },
+            "description": "EXACT match on the source-native classification string."
+          },
+          {
+            "name": "is_active",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Tri-state; CPSC/NHTSA carry null and match neither true nor false.",
+              "title": "Is Active"
+            },
+            "description": "Tri-state; CPSC/NHTSA carry null and match neither true nor false."
+          },
+          {
+            "name": "published_after",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Inclusive from the START of that calendar day.",
+              "title": "Published After"
+            },
+            "description": "Inclusive from the START of that calendar day."
+          },
+          {
+            "name": "published_before",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Inclusive of the ENTIRE published_before calendar day.",
+              "title": "Published Before"
+            },
+            "description": "Inclusive of the ENTIRE published_before calendar day."
+          },
+          {
+            "name": "firm",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 2,
+                  "maxLength": 200
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Case-insensitive substring (unindexed).",
+              "title": "Firm"
+            },
+            "description": "Case-insensitive substring (unindexed)."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "description": "Page size (max 100).",
+              "default": 25,
+              "title": "Limit"
+            },
+            "description": "Page size (max 100)."
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Opaque cursor from a prior next_cursor.",
+              "title": "Cursor"
+            },
+            "description": "Opaque cursor from a prior next_cursor."
+          },
+          {
+            "name": "with_total",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Also compute total (extra COUNT).",
+              "default": false,
+              "title": "With Total"
+            },
+            "description": "Also compute total (extra COUNT)."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_RecallSummary_"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "BadCursor.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "InvalidParameter.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "UpstreamUnavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "RateLimited.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/recalls/{source}/{recall_id}": {
+      "get": {
+        "tags": [
+          "recalls"
+        ],
+        "summary": "Fetch one recall's full record by its source + native recall id.",
+        "description": "The complete record for one recall, by issuing agency + that agency's native id (e.g. `CPSC/24-001`). The source is accepted case-insensitively. Field caveats: `classification`/`risk_level`/`lifecycle_status` are source-native; `is_active` is `null` for CPSC/NHTSA; `distribution_states` is agency prose (a scalar string), distinct from the parsed `distribution_state_codes`.",
+        "operationId": "get_recall_recalls__source___recall_id__get",
+        "parameters": [
+          {
+            "name": "source",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "Issuing agency (accepted case-insensitively).",
+              "title": "Source"
+            },
+            "description": "Issuing agency (accepted case-insensitively)."
+          },
+          {
+            "name": "recall_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "description": "The agency-native recall id.",
+              "title": "Recall Id"
+            },
+            "description": "The agency-native recall id."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecallDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ResourceNotFound.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "InvalidParameter.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "UpstreamUnavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "RateLimited.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/products/search": {
+      "get": {
+        "tags": [
+          "products"
+        ],
+        "summary": "Search recalled products by keyword (full-text) or exact identifier.",
+        "description": "Searches recalled products. Keyword (`q`) is a Postgres full-text search over product name, description, recall title, and firm name, ranked by relevance (`rank`); token/prefix matching only, NO fuzzy/typo search. Identifier (`hin`, `model`) are exact matches. `upc` is matched at the RECALL level via containment (the per-product UPC field is empty), so each hit carries `upc_is_recall_level: true` — a miss means no recall lists that UPC, not that the product was never recalled. Supply at least one of q, hin, model, upc (else 422). Precedence when several given: q > hin/model > upc; source AND-s any path.",
+        "operationId": "search_products_products_search_get",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 2,
+                  "maxLength": 200
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Keywords (Postgres websearch).",
+              "title": "Q"
+            },
+            "description": "Keywords (Postgres websearch)."
+          },
+          {
+            "name": "hin",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 64
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Exact USCG Hull ID.",
+              "title": "Hin"
+            },
+            "description": "Exact USCG Hull ID."
+          },
+          {
+            "name": "model",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 128
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Exact product model.",
+              "title": "Model"
+            },
+            "description": "Exact product model."
+          },
+          {
+            "name": "upc",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 32
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "UPC — matched recall-level via containment.",
+              "title": "Upc"
+            },
+            "description": "UPC — matched recall-level via containment."
+          },
+          {
+            "name": "source",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/Source"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional source filter, AND-ed.",
+              "title": "Source"
+            },
+            "description": "Optional source filter, AND-ed."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "description": "Page size (max 100).",
+              "default": 25,
+              "title": "Limit"
+            },
+            "description": "Page size (max 100)."
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Opaque cursor from a prior next_cursor.",
+              "title": "Cursor"
+            },
+            "description": "Opaque cursor from a prior next_cursor."
+          },
+          {
+            "name": "with_total",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Also compute total (extra COUNT).",
+              "default": false,
+              "title": "With Total"
+            },
+            "description": "Also compute total (extra COUNT)."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_ProductSearchHit_"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "BadCursor.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "InvalidParameter.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "UpstreamUnavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "RateLimited.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/firms/{firm_id}": {
+      "get": {
+        "tags": [
+          "firms"
+        ],
+        "summary": "Fetch a canonical (cross-source) firm profile with its agency registration sidecars.",
+        "description": "One canonical firm — the cross-source cluster, so a maker appearing under several agencies (e.g. Honda under NHTSA and USCG) collapses to a single profile. Includes recall counts, the per-source breakdown (`recalls_by_source`), name variants, and agency registration sidecars: `firm_usda_attributes` (USDA/FSIS), `firm_uscg_attributes` (USCG boat MIC), and `firm_fda_attributes` (FDA FEI). Sidecars have DIFFERENT shapes and any may be empty; CPSC and NHTSA contribute none. `first_recall_at`/`last_recall_at` are null for a firm with no matched recalls. The id is opaque — obtain it from a recall's `firms[].firm_id`.",
+        "operationId": "get_firm_firms__firm_id__get",
+        "parameters": [
+          {
+            "name": "firm_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 32,
+              "maxLength": 32,
+              "pattern": "^[0-9a-f]{32}$",
+              "description": "Opaque canonical firm id (md5 cluster id).",
+              "title": "Firm Id"
+            },
+            "description": "Opaque canonical firm id (md5 cluster id)."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FirmProfile"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "ResourceNotFound.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "InvalidParameter.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "UpstreamUnavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "RateLimited.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "DbHealth": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "ok",
+            "title": "Status",
+            "default": "ok"
+          },
+          "database": {
+            "type": "string",
+            "const": "reachable",
+            "title": "Database",
+            "default": "reachable"
+          }
+        },
+        "type": "object",
+        "title": "DbHealth",
+        "description": "Readiness body (returned only when the SELECT 1 round-trip succeeds)."
+      },
+      "ErrorDetail": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "title": "Type",
+            "examples": [
+              "not_found"
+            ]
+          },
+          "detail": {
+            "title": "Detail",
+            "examples": [
+              "No recall found for CPSC/24-001."
+            ]
+          },
+          "request_id": {
+            "type": "string",
+            "title": "Request Id",
+            "examples": [
+              "b1d9c6f2-3a1e-4c7e-9f0a-7d2c1e5b8a40"
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "detail",
+          "request_id"
+        ],
+        "title": "ErrorDetail"
+      },
+      "ErrorEnvelope": {
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/ErrorDetail"
+          }
+        },
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "title": "ErrorEnvelope"
+      },
+      "FdaAttributes": {
+        "properties": {
+          "firm_fei_num": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "title": "Firm Fei Num"
+          },
+          "firm_legal_nam": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Firm Legal Nam"
+          },
+          "firm_city_nam": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Firm City Nam"
+          },
+          "firm_state_cd": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Firm State Cd"
+          },
+          "firm_state_prvnc_nam": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Firm State Prvnc Nam"
+          },
+          "firm_country_nam": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Firm Country Nam"
+          },
+          "firm_postal_cd": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Firm Postal Cd"
+          },
+          "firm_line1_adr": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Firm Line1 Adr"
+          },
+          "firm_line2_adr": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Firm Line2 Adr"
+          },
+          "firm_surviving_nam": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Firm Surviving Nam"
+          },
+          "firm_surviving_fei": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Firm Surviving Fei"
+          }
+        },
+        "type": "object",
+        "required": [
+          "firm_fei_num"
+        ],
+        "title": "FdaAttributes",
+        "description": "An FDA FEI firm row (firm_fda_attributes, join key firm_fei_num cast to text)."
+      },
+      "FirmProfile": {
+        "properties": {
+          "firm_id": {
+            "type": "string",
+            "title": "Firm Id"
+          },
+          "canonical_name": {
+            "type": "string",
+            "title": "Canonical Name",
+            "examples": [
+              "Acme Foods Inc"
+            ]
+          },
+          "normalized_name": {
+            "type": "string",
+            "title": "Normalized Name"
+          },
+          "observed_names": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Observed Names"
+          },
+          "observed_company_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Observed Company Ids"
+          },
+          "alternate_names": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Alternate Names"
+          },
+          "total_recalls": {
+            "type": "integer",
+            "title": "Total Recalls",
+            "default": 0
+          },
+          "active_recalls": {
+            "type": "integer",
+            "title": "Active Recalls",
+            "default": 0
+          },
+          "first_recall_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Recall At"
+          },
+          "last_recall_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Recall At"
+          },
+          "roles": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Roles"
+          },
+          "recalls_by_source": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Recalls By Source",
+            "examples": [
+              {
+                "FDA": 2,
+                "USDA": 1
+              }
+            ]
+          },
+          "distinct_products": {
+            "type": "integer",
+            "title": "Distinct Products",
+            "default": 0
+          },
+          "firm_usda_attributes": {
+            "items": {
+              "$ref": "#/components/schemas/UsdaEstablishment"
+            },
+            "type": "array",
+            "title": "Firm Usda Attributes"
+          },
+          "firm_uscg_attributes": {
+            "items": {
+              "$ref": "#/components/schemas/UscgManufacturer"
+            },
+            "type": "array",
+            "title": "Firm Uscg Attributes"
+          },
+          "firm_fda_attributes": {
+            "items": {
+              "$ref": "#/components/schemas/FdaAttributes"
+            },
+            "type": "array",
+            "title": "Firm Fda Attributes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "firm_id",
+          "canonical_name",
+          "normalized_name"
+        ],
+        "title": "FirmProfile",
+        "description": "One canonical (cross-source) firm: identity, aliases, recall stats, and 3 sidecars."
+      },
+      "FirmRef": {
+        "properties": {
+          "firm_id": {
+            "type": "string",
+            "title": "Firm Id",
+            "examples": [
+              "7d2c1e5b8a40f0a9f4c7e3a1e3a1c6f2"
+            ]
+          },
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "examples": [
+              "Acme Corporation"
+            ]
+          },
+          "role": {
+            "type": "string",
+            "title": "Role",
+            "examples": [
+              "manufacturer"
+            ]
+          },
+          "match_confidence": {
+            "type": "string",
+            "title": "Match Confidence",
+            "examples": [
+              "exact_name"
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "firm_id",
+          "name",
+          "role",
+          "match_confidence"
+        ],
+        "title": "FirmRef",
+        "description": "An element of a recall's ``firms[]`` rollup; ``firm_id`` links to ``GET /firms/{id}``."
+      },
+      "Health": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "ok",
+            "title": "Status",
+            "default": "ok"
+          },
+          "version": {
+            "type": "string",
+            "title": "Version",
+            "examples": [
+              "0.1.0"
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "version"
+        ],
+        "title": "Health",
+        "description": "Liveness body."
+      },
+      "Page_ProductSearchHit_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ProductSearchHit"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor",
+            "examples": [
+              "eyJ2IjpbIjIwMjYtMDEtMDEiLCJhYmMiXX0"
+            ]
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit",
+            "examples": [
+              25
+            ]
+          },
+          "total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total",
+            "description": "Only when with_total=true.",
+            "examples": [
+              null
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "limit"
+        ],
+        "title": "Page[ProductSearchHit]"
+      },
+      "Page_RecallSummary_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/RecallSummary"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor",
+            "examples": [
+              "eyJ2IjpbIjIwMjYtMDEtMDEiLCJhYmMiXX0"
+            ]
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit",
+            "examples": [
+              25
+            ]
+          },
+          "total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total",
+            "description": "Only when with_total=true.",
+            "examples": [
+              null
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "limit"
+        ],
+        "title": "Page[RecallSummary]"
+      },
+      "ProductSearchHit": {
+        "properties": {
+          "recall_product_id": {
+            "type": "string",
+            "title": "Recall Product Id"
+          },
+          "recall_event_id": {
+            "type": "string",
+            "title": "Recall Event Id"
+          },
+          "source": {
+            "$ref": "#/components/schemas/Source"
+          },
+          "source_recall_id": {
+            "type": "string",
+            "title": "Source Recall Id"
+          },
+          "product_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Product Name"
+          },
+          "product_description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Product Description"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Type",
+            "examples": [
+              "Frozen ready-to-eat"
+            ]
+          },
+          "model_year": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Year",
+            "examples": [
+              2019
+            ]
+          },
+          "hin": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hin"
+          },
+          "upc": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Upc",
+            "description": "Product-grain UPC; currently null for all rows."
+          },
+          "recall_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recall Title"
+          },
+          "classification": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Classification"
+          },
+          "risk_level": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Risk Level"
+          },
+          "published_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Published At"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
+          "is_active": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Active"
+          },
+          "firm_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Firm Name"
+          },
+          "recall_product_upcs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Recall Product Upcs"
+          },
+          "rank": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rank",
+            "description": "Relevance; present only for keyword (q) search."
+          },
+          "upc_is_recall_level": {
+            "type": "boolean",
+            "const": true,
+            "title": "Upc Is Recall Level",
+            "description": "UPC matches are recall-level (recall_product_upcs), not product-grain.",
+            "default": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "recall_product_id",
+          "recall_event_id",
+          "source",
+          "source_recall_id",
+          "published_at"
+        ],
+        "title": "ProductSearchHit"
+      },
+      "RecallDetail": {
+        "properties": {
+          "recall_event_id": {
+            "type": "string",
+            "title": "Recall Event Id"
+          },
+          "source": {
+            "$ref": "#/components/schemas/Source"
+          },
+          "source_recall_id": {
+            "type": "string",
+            "title": "Source Recall Id"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
+          "announced_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Announced At"
+          },
+          "published_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Published At"
+          },
+          "classification": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Classification"
+          },
+          "risk_level": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Risk Level"
+          },
+          "lifecycle_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lifecycle Status"
+          },
+          "is_active": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Active"
+          },
+          "reason_category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason Category"
+          },
+          "distribution_scope": {
+            "type": "string",
+            "title": "Distribution Scope"
+          },
+          "primary_firm_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Primary Firm Name"
+          },
+          "firm_count": {
+            "type": "integer",
+            "title": "Firm Count",
+            "default": 0
+          },
+          "product_count": {
+            "type": "integer",
+            "title": "Product Count",
+            "default": 0
+          },
+          "edit_event_count": {
+            "type": "integer",
+            "title": "Edit Event Count",
+            "default": 0
+          },
+          "has_been_edited": {
+            "type": "boolean",
+            "title": "Has Been Edited",
+            "default": false
+          },
+          "recall_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recall Reason"
+          },
+          "corrective_action": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Corrective Action"
+          },
+          "consequence_of_defect": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Consequence Of Defect"
+          },
+          "distribution_states": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Distribution States",
+            "description": "Agency prose (scalar string)."
+          },
+          "distribution_state_codes": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Distribution State Codes",
+            "description": "Parsed USPS codes."
+          },
+          "distribution_country_codes": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Distribution Country Codes",
+            "description": "ISO alpha-2, foreign-only (US excluded by design)."
+          },
+          "hazards": {
+            "anyOf": [
+              {
+                "items": {},
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hazards",
+            "description": "Opaque hazard objects; may be null."
+          },
+          "product_upcs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Product Upcs",
+            "description": "Recall-level UPCs."
+          },
+          "product_names": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Product Names"
+          },
+          "models": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Models"
+          },
+          "hins": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Hins",
+            "description": "USCG Hull IDs."
+          },
+          "firms": {
+            "items": {
+              "$ref": "#/components/schemas/FirmRef"
+            },
+            "type": "array",
+            "title": "Firms"
+          },
+          "first_seen_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Seen At"
+          },
+          "last_seen_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Seen At"
+          },
+          "edit_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Edit Count"
+          },
+          "is_currently_active": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Currently Active"
+          },
+          "was_ever_retracted": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Was Ever Retracted"
+          }
+        },
+        "type": "object",
+        "required": [
+          "recall_event_id",
+          "source",
+          "source_recall_id",
+          "published_at",
+          "distribution_scope"
+        ],
+        "title": "RecallDetail",
+        "description": "The full wide row: summary subset + narrative, geo, lifecycle, and the jsonb rollups."
+      },
+      "RecallSummary": {
+        "properties": {
+          "recall_event_id": {
+            "type": "string",
+            "title": "Recall Event Id"
+          },
+          "source": {
+            "$ref": "#/components/schemas/Source"
+          },
+          "source_recall_id": {
+            "type": "string",
+            "title": "Source Recall Id",
+            "examples": [
+              "24-001"
+            ]
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title",
+            "examples": [
+              "Acme Toaster Fire Hazard"
+            ]
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
+          "announced_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Announced At"
+          },
+          "published_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Published At"
+          },
+          "classification": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Classification",
+            "examples": [
+              "Class II"
+            ]
+          },
+          "risk_level": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Risk Level",
+            "examples": [
+              "Low - Class II"
+            ]
+          },
+          "lifecycle_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lifecycle Status"
+          },
+          "is_active": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Active",
+            "description": "Tri-state; null for CPSC/NHTSA."
+          },
+          "reason_category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason Category"
+          },
+          "distribution_scope": {
+            "type": "string",
+            "title": "Distribution Scope",
+            "examples": [
+              "Nationwide"
+            ]
+          },
+          "primary_firm_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Primary Firm Name"
+          },
+          "firm_count": {
+            "type": "integer",
+            "title": "Firm Count",
+            "default": 0
+          },
+          "product_count": {
+            "type": "integer",
+            "title": "Product Count",
+            "default": 0
+          },
+          "edit_event_count": {
+            "type": "integer",
+            "title": "Edit Event Count",
+            "default": 0
+          },
+          "has_been_edited": {
+            "type": "boolean",
+            "title": "Has Been Edited",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "recall_event_id",
+          "source",
+          "source_recall_id",
+          "published_at",
+          "distribution_scope"
+        ],
+        "title": "RecallSummary",
+        "description": "The list projection — the small, list-relevant subset (not the full wide row)."
+      },
+      "Source": {
+        "type": "string",
+        "enum": [
+          "CPSC",
+          "FDA",
+          "USDA",
+          "NHTSA",
+          "USCG"
+        ],
+        "title": "Source",
+        "description": "The one closed cross-source domain (uppercase). Free 422 on a bad path/query value."
+      },
+      "UscgManufacturer": {
+        "properties": {
+          "mic": {
+            "type": "string",
+            "title": "Mic"
+          },
+          "company_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Company Name"
+          },
+          "dba": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dba"
+          },
+          "parent_company": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Company"
+          },
+          "parent_mic": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Mic"
+          },
+          "past_company_1": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Past Company 1"
+          },
+          "past_company_2": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Past Company 2"
+          },
+          "past_company_3": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Past Company 3"
+          },
+          "address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address"
+          },
+          "city": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "City"
+          },
+          "state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "State"
+          },
+          "zip": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Zip"
+          },
+          "country": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Country"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "in_business": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "In Business"
+          },
+          "out_of_business": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Out Of Business"
+          },
+          "date_modified": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date Modified"
+          },
+          "uscg_directory_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Uscg Directory Id"
+          },
+          "detail_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail Url"
+          },
+          "mic_has_prior_holder": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mic Has Prior Holder"
+          },
+          "mic_oob_recycled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mic Oob Recycled"
+          },
+          "mic_renamed_not_recycled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mic Renamed Not Recycled"
+          },
+          "prior_holders": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Prior Holders"
+          }
+        },
+        "type": "object",
+        "required": [
+          "mic"
+        ],
+        "title": "UscgManufacturer",
+        "description": "A USCG boat-manufacturer/MIC row (firm_uscg_attributes, join key mic)."
+      },
+      "UsdaEstablishment": {
+        "properties": {
+          "establishment_id": {
+            "type": "string",
+            "title": "Establishment Id"
+          },
+          "establishment_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Establishment Name"
+          },
+          "address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address"
+          },
+          "city": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "City"
+          },
+          "state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "State"
+          },
+          "zip": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Zip"
+          },
+          "county": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "County"
+          },
+          "fips_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fips Code"
+          },
+          "geolocation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Geolocation"
+          },
+          "latest_mpi_active_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Mpi Active Date"
+          },
+          "grant_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Grant Date"
+          },
+          "status_regulated_est": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status Regulated Est"
+          },
+          "size": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size"
+          },
+          "district": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "District"
+          },
+          "circuit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Circuit"
+          },
+          "activities": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Activities"
+          },
+          "dbas": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dbas"
+          }
+        },
+        "type": "object",
+        "required": [
+          "establishment_id"
+        ],
+        "title": "UsdaEstablishment",
+        "description": "A USDA/FSIS establishment row (firm_usda_attributes, join key establishment_id)."
+      }
+    }
+  }
+}

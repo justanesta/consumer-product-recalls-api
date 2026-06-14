@@ -39,12 +39,11 @@ repos:
         pass_filenames: false
         files: ^(pyproject\.toml|uv\.lock)$
 
-# --- Add in C8 once src/recalls_api/export_openapi.py + the committed openapi.json exist ---
-#  - repo: local
-#    hooks:
-#      - id: openapi-drift
-#        name: Verify committed openapi.json matches the live app
-#        entry: uv run python -m recalls_api.export_openapi --check
-#        language: system
-#        pass_filenames: false
-#        files: ^(src/recalls_api/.*\.py|openapi\.json)$
+  - repo: local
+    hooks:
+      - id: openapi-drift
+        name: Verify committed openapi.json matches the live app
+        entry: uv run python -m recalls_api.export_openapi --check
+        language: system
+        pass_filenames: false
+        files: ^(src/recalls_api/.*\.py|openapi\.json)$
