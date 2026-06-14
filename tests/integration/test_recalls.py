@@ -56,6 +56,52 @@ async def test_date_range_inclusive_of_whole_before_day(client: AsyncClient) -> 
     assert "F-1006" not in ids  # 2026-05-12 is after
 
 
+async def test_filter_by_distribution_scope(client: AsyncClient) -> None:
+    r = await client.get("/recalls", params={"distribution_scope": "Regional", "limit": 100})
+    ids = {it["source_recall_id"] for it in r.json()["items"]}
+    assert ids == {"U-2002"}
+
+
+async def test_filter_by_lifecycle_status_excludes_null_sources(client: AsyncClient) -> None:
+    # lifecycle_status is null for CPSC/NHTSA, so an exact-value filter never returns them.
+    r = await client.get("/recalls", params={"lifecycle_status": "Ongoing", "limit": 100})
+    ids = {it["source_recall_id"] for it in r.json()["items"]}
+    assert ids == {"F-1001"}
+    assert "24-003" not in ids and "24V-004" not in ids  # CPSC/NHTSA (null) excluded
+
+
+async def test_announced_after_excludes_null_announced_rows(client: AsyncClient) -> None:
+    # Only F-1001/F-1006/U-2002 carry announced_at; CPSC/NHTSA/USCG (null) must drop out.
+    r = await client.get("/recalls", params={"announced_after": "2026-01-01", "limit": 100})
+    ids = {it["source_recall_id"] for it in r.json()["items"]}
+    assert ids == {"F-1001", "F-1006", "U-2002"}
+
+
+async def test_announced_before_inclusive_of_whole_day(client: AsyncClient) -> None:
+    # announced_before=2026-04-15 includes U-2002 (announced that day); May rows excluded.
+    r = await client.get("/recalls", params={"announced_before": "2026-04-15", "limit": 100})
+    ids = {it["source_recall_id"] for it in r.json()["items"]}
+    assert "U-2002" in ids
+    assert "F-1001" not in ids and "F-1006" not in ids
+
+
+async def test_source_recall_id_is_exact_match(client: AsyncClient) -> None:
+    hit = await client.get("/recalls", params={"source_recall_id": "F-1001", "limit": 100})
+    assert {it["source_recall_id"] for it in hit.json()["items"]} == {"F-1001"}
+    # exact, not substring: a partial id matches nothing
+    miss = await client.get("/recalls", params={"source_recall_id": "F-100", "limit": 100})
+    assert miss.json()["items"] == []
+
+
+async def test_dimension_filters_and_together(client: AsyncClient) -> None:
+    # source AND distribution_scope compose: Nationwide ∩ FDA = the two F-rows.
+    r = await client.get(
+        "/recalls", params={"source": "FDA", "distribution_scope": "Nationwide", "limit": 100}
+    )
+    ids = {it["source_recall_id"] for it in r.json()["items"]}
+    assert ids == {"F-1001", "F-1006"}
+
+
 async def test_with_total(client: AsyncClient) -> None:
     r = await client.get("/recalls", params={"source": "FDA", "with_total": "true", "limit": 100})
     assert r.json()["total"] == 2

@@ -51,6 +51,12 @@ class RecallFilters:
     published_after: date | None
     published_before: date | None
     firm: str | None
+    # Dimension filters (defaulted so existing positional constructions stay valid).
+    distribution_scope: str | None = None
+    lifecycle_status: str | None = None
+    announced_after: date | None = None
+    announced_before: date | None = None
+    source_recall_id: str | None = None
 
 
 def recall_filters(
@@ -73,5 +79,46 @@ def recall_filters(
         str | None,
         Query(min_length=2, max_length=200, description="Case-insensitive substring (unindexed)."),
     ] = None,
+    distribution_scope: Annotated[
+        str | None,
+        Query(max_length=64, description="EXACT match on the source-native distribution scope."),
+    ] = None,
+    lifecycle_status: Annotated[
+        str | None,
+        Query(
+            max_length=64,
+            description="EXACT match; source-native, null for CPSC/NHTSA (excludes those rows).",
+        ),
+    ] = None,
+    announced_after: Annotated[
+        date | None,
+        Query(description="announced_at >= start of that day (UTC); null-announced rows excluded."),
+    ] = None,
+    announced_before: Annotated[
+        date | None,
+        Query(
+            description="Inclusive of the whole announced_before day; nulls excluded.",
+        ),
+    ] = None,
+    source_recall_id: Annotated[
+        str | None,
+        Query(
+            min_length=1,
+            max_length=128,
+            description="EXACT agency-native id; unique only when combined with source.",
+        ),
+    ] = None,
 ) -> RecallFilters:
-    return RecallFilters(source, classification, is_active, published_after, published_before, firm)
+    return RecallFilters(
+        source=source,
+        classification=classification,
+        is_active=is_active,
+        published_after=published_after,
+        published_before=published_before,
+        firm=firm,
+        distribution_scope=distribution_scope,
+        lifecycle_status=lifecycle_status,
+        announced_after=announced_after,
+        announced_before=announced_before,
+        source_recall_id=source_recall_id,
+    )

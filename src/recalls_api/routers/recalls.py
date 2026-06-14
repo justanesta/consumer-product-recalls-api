@@ -18,11 +18,14 @@ router = APIRouter(prefix="/recalls", tags=["recalls"])
 
 _LIST_DESC = (
     "Recalls across CPSC, FDA, USDA, NHTSA, USCG, newest first (`published_at DESC`), keyset "
-    "(seek) paginated — pass the previous page's `next_cursor` back as `cursor`. Caveats: "
-    "`classification` is source-native (not unified); `is_active` is tri-state, so CPSC/NHTSA "
-    "(`null`) match neither `true` nor `false`; deep UNFILTERED paging is a full sort (only "
-    "`(source, published_at)` is indexed) — add `?source=` for index-backed paging; `firm` is an "
-    "unindexed substring convenience filter. Total is omitted unless `with_total=true`."
+    "(seek) paginated — pass the previous page's `next_cursor` back as `cursor`. Filters AND "
+    "together: `source`, `classification`, `is_active`, `lifecycle_status`, `distribution_scope`, "
+    "`source_recall_id`, `firm`, plus the `published_*` and `announced_*` date ranges. Caveats: "
+    "`classification`/`lifecycle_status` are source-native (not unified); `is_active` and "
+    "`lifecycle_status` are null for CPSC/NHTSA, so a value filter on either excludes those rows; "
+    "`announced_at` is nullable, so an `announced_*` filter drops rows lacking it; "
+    "`source_recall_id` is exact and unique only with `source` (use the detail route); "
+    "`firm` is an unindexed substring filter. Total is omitted unless `with_total=true`."
 )
 _DETAIL_DESC = (
     "The complete record for one recall, by issuing agency + that agency's native id "

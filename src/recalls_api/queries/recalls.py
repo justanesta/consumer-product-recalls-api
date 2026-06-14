@@ -114,15 +114,29 @@ def recalls_predicates(filters: RecallFilters) -> list[ColumnElement[bool]]:
         )
     if filters.firm is not None:  # substring; unindexed (02) — accept seq cost
         conds.append(c.primary_firm_name.ilike(sa.bindparam("firm", f"%{filters.firm}%")))
+    if filters.distribution_scope is not None:  # NOT NULL 4-value enum
+        conds.append(c.distribution_scope == sa.bindparam("dist_scope", filters.distribution_scope))
+    if filters.lifecycle_status is not None:  # NULL for CPSC/NHTSA -> excluded
+        conds.append(c.lifecycle_status == sa.bindparam("lifecycle", filters.lifecycle_status))
+    if filters.announced_after is not None:  # announced_at NULLABLE -> NULL rows excluded
+        conds.append(c.announced_at >= sa.bindparam("ann_after", filters.announced_after))
+    if filters.announced_before is not None:  # whole-day inclusive (cf. published_before)
+        conds.append(
+            c.announced_at
+            < sa.bindparam("ann_before", filters.announced_before + timedelta(days=1))
+        )
+    if filters.source_recall_id is not None:  # EXACT; unique only with source
+        conds.append(
+            c.source_recall_id == sa.bindparam("source_recall_id", filters.source_recall_id)
+        )
     return conds
 
 
 def list_stmt(filters: RecallFilters, cursor: Cursor | None, limit: int) -> Select:
     """Keyset list. ORDER BY published_at DESC, recall_event_id ASC; fetch limit+1 for has_next.
 
-    CAVEAT (02 blocker): an UNFILTERED published_at sort is NOT index-backed (only (source,
-    published_at) exists); index-backed only when ?source= leads. Gold-readiness R2 adds the
-    matching (published_at DESC, recall_event_id) index.
+    The (published_at DESC, recall_event_id) sort is index-backed by the gold-readiness R2 index of
+    the same shape (applied upstream); a leading ?source= can instead use (source, published_at).
     """
     stmt = sa.select(*_LIST_COLS)
     conds = recalls_predicates(filters)
