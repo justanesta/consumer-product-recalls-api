@@ -91,6 +91,45 @@ If (A) shows only `SELECT` and (B) is clean, you're correctly configured even if
 the API sets it per-session anyway. Running the `ALTER ROLE` in (2) is a cheap belt; do it if you want
 hand-opened `psql` sessions protected too.
 
+## Environment & secrets
+
+**Only two real secrets exist in this project.** Everything else is non-secret config with defaults
+in `settings.py` (read via pydantic-settings; a few extras via `os.getenv`).
+
+| Secret | What it is | Required? | Set where |
+|---|---|---|---|
+| **`NEON_DATABASE_URL_RO`** | read-only Neon DSN (`recalls_readonly`); app fails loud at boot without it | **yes, at runtime** | **local:** Proton Pass via `.env.pass` (preferred) or `.env`; **Fly:** secret; **Render:** dashboard. **Not in CI** (`conftest` injects a dummy; tests never hit real Neon). |
+| **`FLY_API_TOKEN`** | Fly **deploy** token, consumed only by `deploy.yml` | only for auto-deploy | **GitHub Actions repo secret only.** NOT needed locally — `flyctl` uses your `flyctl auth login` session. |
+
+**Non-secret config (all optional; defaults shown).** `ENVIRONMENT` (development) · `LOG_LEVEL` (INFO) ·
+`LOG_FORMAT` (json; `console` for pretty local logs — also auto-detects a TTY) · `GIT_SHA` (startup/release
+marker) · `PORT` (8080) · `DB_POOL_SIZE`/`DB_MAX_OVERFLOW`/`DB_POOL_RECYCLE_SECONDS`/`DB_CONNECT_TIMEOUT_SECONDS`/`DB_COMMAND_TIMEOUT_SECONDS`
+· `CACHE_MAX_AGE_SECONDS` (300) · `RATE_LIMIT_ENABLED` (true)/`RATE_LIMIT_DEFAULT` (60/minute) ·
+`PAGE_LIMIT_DEFAULT`/`PAGE_LIMIT_MAX` (25/100).
+
+**Per environment:**
+- **Local dev:** `NEON_DATABASE_URL_RO` only. Tests need *nothing* secret (local: testcontainers via
+  `sg docker`; CI: a `postgres:16` service + plain `TEST_DATABASE_URL` + a dummy `NEON_DATABASE_URL_RO`).
+- **Production (Fly):** `NEON_DATABASE_URL_RO` as a Fly secret; `ENVIRONMENT`/`LOG_LEVEL` plain in
+  `fly.toml [env]`; `FLY_API_TOKEN` + a `production` environment in GitHub.
+
+**Local secret-loading model (direnv + Proton Pass).** Two complementary channels:
+- **`.envrc` → `dotenv` → `.env`** (direnv): on `cd` into the repo, direnv evaluates `.envrc`, whose
+  `dotenv` helper loads `.env`'s `KEY=VALUE` lines into your **ambient shell** (and `PATH_add .venv/bin`
+  puts the uv venv on PATH). Use `.env` for **non-secret config only**.
+- **`.env.pass` → `pass-cli`** (Proton Pass): `.env.pass` holds only `pass://vault/item/field`
+  references (no values — safe to commit). `pass-cli run --env-file .env.pass -- <cmd>` resolves them
+  and injects the real values into the **child process only** — never the shell, never plaintext on
+  disk. Run the app as:
+  `pass-cli run --env-file .env.pass -- uv run uvicorn --factory recalls_api.main:create_app --reload`.
+- pydantic-settings precedence is **process env > `.env` file > defaults**, so the pass-cli-injected
+  DSN wins and the secret never needs to live in `.env`. (`Settings` uses `extra="ignore"`, so extra
+  keys in `.env` won't error.)
+
+**What you do NOT need:** any API-auth secret (open/no-auth API — no JWT/keys/OAuth/`SECRET_KEY`), any
+third-party service key, Redis/cache backend (rate-limit is in-memory), write DB creds, cloud/object
+storage creds, or TLS cert files (Neon TLS rides the DSN; Fly terminates HTTPS at its proxy).
+
 ## Go-live definition of done
 
 - [ ] (A) shows SELECT-only; (B) clean → role is genuinely read-only.
