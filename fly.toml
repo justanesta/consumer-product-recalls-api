@@ -1,0 +1,33 @@
+# Fly.io app config (apps v2). Deploy: `flyctl deploy`. Set the DB secret out-of-band:
+#   flyctl secrets set NEON_DATABASE_URL_RO="postgresql+asyncpg://recalls_readonly:<pw>@<host>/<db>?ssl=require"
+# TODO(operator): set `app` + `primary_region` (a region near your Neon project, e.g. iad for us-east).
+app = "recalls-api"
+primary_region = "iad"
+
+[build]
+
+[env]
+  ENVIRONMENT = "production"
+  LOG_LEVEL = "INFO"
+  # NEON_DATABASE_URL_RO is a Fly SECRET (flyctl secrets set ...), never in this file.
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0  # scale-to-zero; raise to 1 (within free hours) to drop the app cold start
+
+  [http_service.concurrency]
+    type = "requests"
+    soft_limit = 50
+    hard_limit = 100
+
+  # Liveness only — DB-free /health so a sleeping Neon never kills the machine. /health/db is the
+  # readiness probe and is intentionally NOT in this loop.
+  [[http_service.checks]]
+    method = "get"
+    path = "/health"
+    interval = "15s"
+    timeout = "3s"
+    grace_period = "10s"

@@ -130,6 +130,16 @@ async def _validation_error_handler(_: Request, exc: RequestValidationError) -> 
     return _envelope("invalid_parameter", details, status.HTTP_422_UNPROCESSABLE_CONTENT)
 
 
+def rate_limited_response(retry_after: str = "60") -> JSONResponse:
+    """The 429 envelope — wired to slowapi's RateLimitExceeded in main.create_app."""
+    return _envelope(
+        "rate_limited",
+        "rate limit exceeded; please slow down",
+        status.HTTP_429_TOO_MANY_REQUESTS,
+        {"Retry-After": retry_after},
+    )
+
+
 def register_error_handlers(app: FastAPI) -> None:
     """Wire the handlers. One ApiError handler covers all subtypes (FastAPI matches by MRO)."""
     app.add_exception_handler(ApiError, _api_error_handler)  # type: ignore[arg-type]

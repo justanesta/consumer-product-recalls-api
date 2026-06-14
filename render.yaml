@@ -1,0 +1,15 @@
+# Render fallback (Fly.io is primary — see project_scope/build/06). The app is a plain Dockerized ASGI
+# service, so switching targets is config-only, no code change. Inactive unless you deploy to Render.
+services:
+  - type: web
+    name: recalls-api
+    runtime: docker
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: LOG_LEVEL
+        value: INFO
+      - key: NEON_DATABASE_URL_RO
+        sync: false # set in the Render dashboard; never committed

@@ -18,6 +18,7 @@ from recalls_api.errors import (
     _api_error_handler,
     _catch_all_handler,
     _envelope,
+    rate_limited_response,
 )
 
 
@@ -65,3 +66,10 @@ async def test_catch_all_is_opaque() -> None:
     body = _body(resp)
     assert body["error"]["detail"] == "an unexpected error occurred"
     assert "secret SQL" not in json.dumps(body)  # never leak the exception text
+
+
+def test_rate_limited_response_envelope() -> None:
+    resp = rate_limited_response()
+    assert resp.status_code == 429
+    assert resp.headers["Retry-After"] == "60"
+    assert _body(resp)["error"]["type"] == "rate_limited"

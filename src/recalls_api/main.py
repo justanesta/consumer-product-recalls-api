@@ -1,17 +1,28 @@
-"""App factory + lifespan. Registration order: configure_logging -> RequestIdMiddleware (outermost)
--> error handlers -> routers. slowapi rate limiting and Cache-Control/ETag headers are added in C9.
+"""App factory + lifespan.
+
+Middleware is added inner-first; the LAST add is the OUTERMOST, so RequestIdMiddleware (added last)
+wraps everything and binds the request_id before any handler runs. Error handlers emit the uniform
+envelope; slowapi rate-limiting and Cache-Control headers are wired here.
 """
 
 from __future__ import annotations
 
+import os
+import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from email.utils import formatdate
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, Response
+from slowapi import Limiter
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
+from slowapi.util import get_remote_address
 
-from recalls_api import db
-from recalls_api.errors import register_error_handlers
+from recalls_api import __version__, db
+from recalls_api.errors import rate_limited_response, register_error_handlers
 from recalls_api.logging import RequestIdMiddleware, configure_logging
+from recalls_api.middleware import CacheControlMiddleware
 from recalls_api.routers import firms, health, products, recalls
 from recalls_api.settings import get_settings
 
@@ -33,28 +44,51 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         await db.close_pool(app)
 
 
+async def _on_rate_limited(request: Request, exc: RateLimitExceeded) -> Response:
+    return rate_limited_response()
+
+
 def create_app() -> FastAPI:
     settings = get_settings()
     configure_logging(settings.log_level)
 
     app = FastAPI(
         title="Consumer Product Recalls API",
-        version="0.1.0",
+        version=__version__,
         description=_DESCRIPTION,
         lifespan=lifespan,
     )
 
-    app.add_middleware(RequestIdMiddleware)  # outermost: binds request_id before handlers run
+    # Rate limit (slowapi, per-IP; an API-repo choice, not ADR-ratified). default_limits applies to
+    # every route via the middleware; health probes are low-frequency, so they won't trip it.
+    app.state.limiter = Limiter(
+        key_func=get_remote_address,
+        default_limits=[settings.rate_limit_default],
+        enabled=settings.rate_limit_enabled,
+    )
+
+    # Coarse cache validators (per-startup; a per-rebuild ETag awaits gold_meta.rebuilt_at, R6).
+    startup_id = os.getenv("GIT_SHA") or uuid.uuid4().hex[:12]
+
+    # Inner-first; RequestIdMiddleware added LAST so it is OUTERMOST (binds request_id first).
+    app.add_middleware(
+        CacheControlMiddleware,
+        max_age=settings.cache_max_age_seconds,
+        etag=f'W/"{__version__}-{startup_id}"',
+        last_modified=formatdate(usegmt=True),
+    )
+    app.add_middleware(SlowAPIMiddleware)
+    app.add_middleware(RequestIdMiddleware)
+
     register_error_handlers(app)
+    app.add_exception_handler(RateLimitExceeded, _on_rate_limited)  # type: ignore[arg-type]
 
     app.include_router(health.router)
     app.include_router(recalls.router)
     app.include_router(products.router)
     app.include_router(firms.router)
-    # TODO(C9): slowapi limiter + middleware (RateLimitExceeded -> 429 envelope) and
-    #           Cache-Control / ETag / Last-Modified keyed off the nightly ~03:00 UTC rebuild.
     return app
 
 
 # Served via the factory so importing this module never builds the app (nor needs the DSN):
-#   uvicorn --factory recalls_api.main:create_app
+#   uvicorn --factory recalls_api.main:create_app --proxy-headers
