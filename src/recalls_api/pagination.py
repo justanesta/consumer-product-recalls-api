@@ -45,9 +45,12 @@ class Cursor:
             values = json.loads(raw)
         except (binascii.Error, UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
             raise BadCursor("malformed pagination cursor") from exc
-        if not isinstance(values, list):
-            raise BadCursor("cursor payload is not a tuple")
-        return cls(values=tuple(values))
+        # Every cursor is a 2-tuple (sort_value, id). Guard the arity here so a wrong-shape payload
+        # raises BadCursor (400) instead of crashing the 2-tuple unpack downstream (an uncaught
+        # ValueError would leak a 500).
+        if not isinstance(values, list) or len(values) != 2:
+            raise BadCursor("cursor payload is not a 2-element tuple")
+        return cls(values=(values[0], values[1]))
 
 
 def published_at_keyset_where(
@@ -55,10 +58,15 @@ def published_at_keyset_where(
     pub_col: ColumnElement[datetime],
     id_col: ColumnElement[str],
 ) -> ColumnElement[bool]:
-    """Seek WHERE for ``ORDER BY published_at DESC, id ASC``. Bound params only."""
-    cur_pub, cur_id = cursor.values
-    p = sa.bindparam("cur_pub", cur_pub)
-    i = sa.bindparam("cur_id", cur_id)
+    """Seek WHERE for ``ORDER BY published_at DESC, id ASC``. Bound params only.
+
+    The cursor carries published_at as an ISO string (JSON-safe); parse it back to a ``datetime`` so
+    asyncpg binds a ``timestamptz`` (a bare str would fail the timestamptz comparison).
+    """
+    cur_pub_raw, cur_id = cursor.values
+    cur_pub = datetime.fromisoformat(cur_pub_raw) if isinstance(cur_pub_raw, str) else cur_pub_raw
+    p = sa.bindparam("cur_pub", cur_pub, type_=sa.TIMESTAMP(timezone=True))
+    i = sa.bindparam("cur_id", cur_id, type_=sa.Text())
     return sa.or_(pub_col < p, sa.and_(pub_col == p, id_col > i))
 
 

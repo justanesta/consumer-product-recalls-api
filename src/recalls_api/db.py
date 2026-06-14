@@ -40,6 +40,8 @@ def make_engine(settings: Settings) -> AsyncEngine:
                 # Belt: ask the session to refuse writes. The role grant is the suspenders.
                 "default_transaction_read_only": "on",
                 "statement_timeout": str(int(settings.db_command_timeout_seconds * 1000)),
+                # Pin UTC so date filters (date vs timestamptz) resolve on UTC day boundaries.
+                "timezone": "UTC",
                 "application_name": "recalls-api",
             },
         },

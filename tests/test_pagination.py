@@ -25,7 +25,7 @@ _value = st.one_of(
 )
 
 
-@given(st.lists(_value, min_size=1, max_size=4))
+@given(st.lists(_value, min_size=2, max_size=2))  # cursors are always 2-tuples (sort_value, id)
 def test_cursor_roundtrip_property(values: list[object]) -> None:
     decoded = Cursor.decode(Cursor(tuple(values)).encode())
     assert list(decoded.values) == values
@@ -44,6 +44,13 @@ def test_cursor_roundtrip_property(values: list[object]) -> None:
 def test_cursor_tamper_raises_bad_cursor(bad: str) -> None:
     with pytest.raises(BadCursor):
         Cursor.decode(bad)
+
+
+@pytest.mark.parametrize("values", [(), (1,), (1, 2, 3)])
+def test_cursor_wrong_arity_raises_bad_cursor(values: tuple[object, ...]) -> None:
+    # a decodable-but-wrong-shape payload must raise BadCursor (400), not crash the 2-tuple unpack
+    with pytest.raises(BadCursor):
+        Cursor.decode(Cursor(values).encode())
 
 
 def test_slice_page() -> None:

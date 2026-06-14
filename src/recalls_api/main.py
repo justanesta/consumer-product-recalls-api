@@ -12,7 +12,7 @@ from fastapi import FastAPI
 from recalls_api import db
 from recalls_api.errors import register_error_handlers
 from recalls_api.logging import RequestIdMiddleware, configure_logging
-from recalls_api.routers import health
+from recalls_api.routers import health, recalls
 from recalls_api.settings import get_settings
 
 _DESCRIPTION = (
@@ -48,10 +48,12 @@ def create_app() -> FastAPI:
     register_error_handlers(app)
 
     app.include_router(health.router)
-    # TODO(C4-C7): include recalls / products / firms routers as they land.
+    app.include_router(recalls.router)
+    # TODO(C6-C7): include products / firms routers as they land.
     # TODO(C9): slowapi limiter + middleware (RateLimitExceeded -> 429 envelope) and
     #           Cache-Control / ETag / Last-Modified keyed off the nightly ~03:00 UTC rebuild.
     return app
 
 
-app = create_app()  # module-level for `uvicorn recalls_api.main:app`
+# Served via the factory so importing this module never builds the app (nor needs the DSN):
+#   uvicorn --factory recalls_api.main:create_app

@@ -12,6 +12,7 @@ from typing import Any
 
 import structlog
 from fastapi import FastAPI, Request, status
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.exc import DBAPIError, OperationalError
@@ -85,7 +86,7 @@ ITEM_ERRORS: dict[int | str, dict[str, Any]] = {**ERR_404, **ERR_422, **ERR_503,
 
 def _envelope(
     error_type: str,
-    detail: str,
+    detail: Any,
     status_code: int,
     headers: dict[str, str] | None = None,
 ) -> JSONResponse:
@@ -123,9 +124,16 @@ async def _catch_all_handler(_: Request, exc: Exception) -> JSONResponse:
     )
 
 
+async def _validation_error_handler(_: Request, exc: RequestValidationError) -> JSONResponse:
+    # FastAPI's own request-validation 422 (Query/Path/body) -> our uniform envelope.
+    details = [{"loc": list(e["loc"]), "msg": e["msg"]} for e in exc.errors()]
+    return _envelope("invalid_parameter", details, status.HTTP_422_UNPROCESSABLE_CONTENT)
+
+
 def register_error_handlers(app: FastAPI) -> None:
     """Wire the handlers. One ApiError handler covers all subtypes (FastAPI matches by MRO)."""
     app.add_exception_handler(ApiError, _api_error_handler)  # type: ignore[arg-type]
+    app.add_exception_handler(RequestValidationError, _validation_error_handler)  # type: ignore
     app.add_exception_handler(OperationalError, _db_error_handler)
     app.add_exception_handler(DBAPIError, _db_error_handler)
     app.add_exception_handler(Exception, _catch_all_handler)  # last resort

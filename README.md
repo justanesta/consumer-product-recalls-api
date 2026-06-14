@@ -35,7 +35,7 @@ Requires [`uv`](https://docs.astral.sh/uv/) (it provisions Python 3.12 automatic
 uv sync                       # create .venv, install deps (incl. dev group)
 cp .env.example .env          # then set NEON_DATABASE_URL_RO (read-only role; see below)
 uv run pre-commit install     # enable the lint/type/secret hooks
-uv run uvicorn recalls_api.main:app --reload   # http://127.0.0.1:8000/docs
+uv run uvicorn --factory recalls_api.main:create_app --reload   # http://127.0.0.1:8000/docs
 ```
 
 > **Database role.** The API connects with a dedicated **read-only** Neon role
