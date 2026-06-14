@@ -1,16 +1,17 @@
 """Integration fixtures: a Postgres seeded with the cassette + an in-process httpx client.
 
-Gated on ``TEST_DATABASE_URL`` (a ``postgresql+asyncpg://...`` URL) — integration tests SKIP when
-it is unset, so the unit suite still runs anywhere. The host is pluggable (local testcontainers, CI
-``services: postgres``, or a Neon branch) — only the URL changes. The seed runs via a raw asyncpg
-connection (one multi-statement call); the app's ``get_conn`` is overridden to the seeded engine
-and the lifespan/real pool is never opened.
+The DB host is resolved once per session by ``database_url``:
+  1. ``TEST_DATABASE_URL`` if set (CI ``services: postgres``, or a Neon branch), else
+  2. an ephemeral testcontainers ``postgres:16`` (needs Docker), else
+  3. SKIP (so the unit suite still runs anywhere).
+The seed runs via a raw asyncpg connection (one multi-statement call); the app's ``get_conn`` is
+then overridden to the seeded engine, and the lifespan/real pool is never opened.
 """
 
 from __future__ import annotations
 
 import os
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterator
 from pathlib import Path
 
 import asyncpg
@@ -22,29 +23,36 @@ from sqlalchemy.ext.asyncio import AsyncConnection, create_async_engine
 _SEED = Path(__file__).resolve().parents[1] / "fixtures" / "seed_gold.sql"
 
 
-def _require_db_url() -> str:
-    url = os.getenv("TEST_DATABASE_URL")
-    if not url:
-        pytest.skip(
-            "TEST_DATABASE_URL unset — integration tests need Postgres (testcontainers / CI)."
-        )
-    return url
+@pytest.fixture(scope="session")
+def database_url() -> Iterator[str]:
+    explicit = os.getenv("TEST_DATABASE_URL")
+    if explicit:
+        yield explicit
+        return
+    try:
+        from testcontainers.postgres import PostgresContainer
+    except ImportError:
+        pytest.skip("integration tests need TEST_DATABASE_URL or testcontainers + Docker")
+    try:
+        with PostgresContainer("postgres:16", driver="asyncpg") as pg:
+            yield pg.get_connection_url()
+    except Exception as exc:  # Docker not running / image pull failed
+        pytest.skip(f"could not start a Postgres testcontainer (Docker unavailable?): {exc}")
 
 
 @pytest_asyncio.fixture
-async def client() -> AsyncIterator[AsyncClient]:
-    url = _require_db_url()  # postgresql+asyncpg://...
-
+async def client(database_url: str) -> AsyncIterator[AsyncClient]:
     # Seed via raw asyncpg (handles the multi-statement script); strip the SQLAlchemy driver suffix.
-    conn = await asyncpg.connect(url.replace("postgresql+asyncpg://", "postgresql://"))
+    conn = await asyncpg.connect(database_url.replace("postgresql+asyncpg://", "postgresql://"))
     try:
         await conn.execute(_SEED.read_text())
     finally:
         await conn.close()
 
-    # Pin UTC (as prod db.py does) so date-vs-timestamptz filters resolve on UTC day boundaries
-    # regardless of the test host's timezone.
-    engine = create_async_engine(url, connect_args={"server_settings": {"timezone": "UTC"}})
+    # Pin UTC (as prod db.py does) so date-vs-timestamptz filters resolve on UTC day boundaries.
+    engine = create_async_engine(
+        database_url, connect_args={"server_settings": {"timezone": "UTC"}}
+    )
 
     # create_app() reads NEON_DATABASE_URL_RO at boot; set a dummy (get_conn is overridden, so the
     # real pool/lifespan is never used).
