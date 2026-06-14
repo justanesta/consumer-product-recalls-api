@@ -20,9 +20,21 @@ jobs:
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }} # deploy exactly the commit CI passed
       - uses: superfly/flyctl-actions/setup-flyctl@master
       - name: Fly deploy
-        run: flyctl deploy --remote-only
+        run: flyctl deploy --remote-only --build-arg GIT_SHA="${{ github.event.workflow_run.head_sha }}"
         env:
           # Set in repo settings: Secrets and variables -> Actions -> FLY_API_TOKEN.
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      - name: Post-deploy readiness smoke
+        # TODO(operator): point at your Fly app hostname. Retries cover a cold-Neon wake (503 -> 200).
+        run: |
+          for i in 1 2 3 4 5; do
+            if curl --fail --silent --show-error "https://recalls-api.fly.dev/health/db"; then
+              echo "readiness ok"; exit 0
+            fi
+            echo "attempt $i not ready; retry in 10s"; sleep 10
+          done
+          echo "post-deploy readiness check failed"; exit 1

@@ -11,6 +11,12 @@ htmlcov/
 coverage.xml
 .env
 .env.*
+*.pem
+*.key
+*.crt
+.vscode/
+.idea/
+*.swp
 tests/
 project_scope/
 .claude/

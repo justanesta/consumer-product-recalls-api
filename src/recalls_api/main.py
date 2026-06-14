@@ -60,12 +60,18 @@ def create_app() -> FastAPI:
     )
 
     # Rate limit (slowapi, per-IP; an API-repo choice, not ADR-ratified). default_limits applies to
-    # every route via the middleware; health probes are low-frequency, so they won't trip it.
-    app.state.limiter = Limiter(
+    # every route via the middleware; health routes are exempted below so probes never consume the
+    # budget. NOTE: the default MemoryStorage is per-process — with scale-to-zero it resets on cold
+    # start and each machine counts separately, so the limit is effectively per-machine, not a true
+    # global (fine at personal scale; use a shared store like Redis for a global limit).
+    limiter = Limiter(
         key_func=get_remote_address,
         default_limits=[settings.rate_limit_default],
         enabled=settings.rate_limit_enabled,
     )
+    app.state.limiter = limiter
+    limiter.exempt(health.health)
+    limiter.exempt(health.health_db)
 
     # Coarse cache validators (per-startup; a per-rebuild ETag awaits gold_meta.rebuilt_at, R6).
     startup_id = os.getenv("GIT_SHA") or uuid.uuid4().hex[:12]

@@ -16,6 +16,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.exc import DBAPIError, OperationalError
+from sqlalchemy.exc import TimeoutError as SqlTimeoutError
 
 from recalls_api.logging import get_request_id
 
@@ -144,6 +145,9 @@ def register_error_handlers(app: FastAPI) -> None:
     """Wire the handlers. One ApiError handler covers all subtypes (FastAPI matches by MRO)."""
     app.add_exception_handler(ApiError, _api_error_handler)  # type: ignore[arg-type]
     app.add_exception_handler(RequestValidationError, _validation_error_handler)  # type: ignore
-    app.add_exception_handler(OperationalError, _db_error_handler)
-    app.add_exception_handler(DBAPIError, _db_error_handler)
+    # Cold/asleep/unreachable Neon: asyncpg raises bare TimeoutError/ConnectionError/OSError that
+    # SQLAlchemy does NOT wrap (OSError's MRO covers them); map those + SQLAlchemy's own errors to
+    # 503 + Retry-After rather than leaking a 500.
+    for db_exc in (OperationalError, DBAPIError, SqlTimeoutError, OSError):
+        app.add_exception_handler(db_exc, _db_error_handler)
     app.add_exception_handler(Exception, _catch_all_handler)  # last resort

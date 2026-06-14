@@ -12,15 +12,21 @@ RUN uv sync --frozen --no-dev
 
 # ---- runtime: slim, non-root, no build tools ----
 FROM python:3.12-slim
+ARG GIT_SHA=""
 RUN groupadd -r app && useradd -r -g app -u 10001 app
 WORKDIR /app
+# Copy the WHOLE /app (.venv AND src): recalls_api is an editable install whose .pth references /app/src,
+# so the source tree must survive into the runtime image.
 COPY --from=builder --chown=app:app /app /app
 ENV PATH="/app/.venv/bin:$PATH" \
     PORT=8080 \
-    ENVIRONMENT=production
+    ENVIRONMENT=production \
+    GIT_SHA=${GIT_SHA}
 USER app
 EXPOSE 8080
 # NEON_DATABASE_URL_RO is provided at runtime (Fly secret); never baked into the image.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD python -c "import sys,urllib.request; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8080/health').status==200 else 1)"
-CMD ["sh", "-c", "uvicorn --factory recalls_api.main:create_app --host 0.0.0.0 --port ${PORT} --proxy-headers"]
+# --forwarded-allow-ips '*' is REQUIRED so uvicorn trusts Fly's proxy and slowapi sees the real client
+# IP (X-Forwarded-For); without it every client collapses into one rate-limit bucket.
+CMD ["sh", "-c", "uvicorn --factory recalls_api.main:create_app --host 0.0.0.0 --port ${PORT} --proxy-headers --forwarded-allow-ips '*'"]
