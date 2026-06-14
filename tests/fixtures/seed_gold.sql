@@ -122,3 +122,66 @@ insert into mart_recall_summary (
  '[{"firm_id": "55555555555555555555555555555555", "name": "Boaty Mfg", "role": "manufacturer", "match_confidence": "uscg_mic_unambiguous"}]',
  1, null, null, '["ABC12345D404"]', '2026-02-10 07:00:00+00', '2026-02-11 07:00:00+00',
  1, null, null, 0, false);
+
+-- ---------------------------------------------------------------------------------------------------
+-- mart_product_search (C6). One row per recalled product; recall_event_id links to a recall above.
+-- search_vector is populated by the UPDATE below (mirrors the dbt-stored tsvector). recall_product_upcs
+-- carries the recall-level UPCs (the per-product `upc` column is NULL, as in production).
+-- ---------------------------------------------------------------------------------------------------
+
+drop table if exists mart_product_search;
+
+create table mart_product_search (
+    recall_product_id   text primary key,
+    recall_event_id     text        not null,
+    source              text        not null,
+    source_recall_id    text        not null,
+    product_name        text,
+    product_description text,
+    model               text,
+    type                text,
+    model_year          text,
+    hin                 text,
+    upc                 text,
+    recall_title        text,
+    classification      text,
+    risk_level          text,
+    published_at        timestamptz not null,
+    url                 text,
+    is_active           boolean,
+    firm_name           text,
+    recall_product_upcs jsonb,
+    search_vector       tsvector
+);
+
+create index mart_product_search_hin on mart_product_search (hin);
+create index mart_product_search_model on mart_product_search (model);
+create index mart_product_search_upc on mart_product_search (upc);
+create index mart_product_search_recall_event on mart_product_search (recall_event_id);
+create index mart_product_search_sv_gin on mart_product_search using gin (search_vector);
+create index mart_product_search_upcs_gin on mart_product_search using gin (recall_product_upcs);
+
+insert into mart_product_search (
+    recall_product_id, recall_event_id, source, source_recall_id, product_name, product_description,
+    model, type, model_year, hin, upc, recall_title, classification, risk_level, published_at, url,
+    is_active, firm_name, recall_product_upcs
+) values
+('rp-001', md5('FDA|F-1001'), 'FDA', 'F-1001', 'Acme Peanut Butter 16oz', 'Creamy peanut butter spread',
+ null, 'Food', null, null, null, 'Acme Peanut Butter Salmonella', 'Class I', null,
+ '2026-05-10 12:00:00+00', 'https://example.test/fda/F-1001', true, 'Acme Foods Inc', '["012345678905"]'),
+('rp-002', md5('NHTSA|24V-004'), 'NHTSA', '24V-004', 'Honda Civic', 'Compact sedan',
+ 'Civic', 'Vehicle', '2019', null, null, 'Honda Fuel Pump Recall', null, null,
+ '2026-03-20 07:00:00+00', 'https://example.test/nhtsa/24V-004', null, 'Honda Motor Co', null),
+('rp-003', md5('NHTSA|24V-004'), 'NHTSA', '24V-004', 'Honda Accord', 'Midsize sedan',
+ 'Accord', 'Vehicle', '2020', null, null, 'Honda Fuel Pump Recall', null, null,
+ '2026-03-20 07:00:00+00', 'https://example.test/nhtsa/24V-004', null, 'Honda Motor Co', null),
+('rp-004', md5('USCG|USCG-005'), 'USCG', 'USCG-005', 'Boaty 30ft Hull', 'Fiberglass boat hull',
+ null, 'Boat', null, 'ABC12345D404', null, 'Boaty Hull Defect', 'H', null,
+ '2026-02-10 06:00:00+00', 'https://example.test/uscg/USCG-005', true, 'Boaty Mfg', null),
+('rp-005', md5('FDA|F-1006'), 'FDA', 'F-1006', 'Acme Cereal 12oz', 'Breakfast cereal',
+ null, 'Food', null, null, null, 'Acme Cereal Undeclared Milk', 'Class III', null,
+ '2026-05-12 09:00:00+00', 'https://example.test/fda/F-1006', false, 'Acme Foods Inc', '["099999999999"]');
+
+update mart_product_search set search_vector = to_tsvector('english',
+    coalesce(product_name, '') || ' ' || coalesce(product_description, '') || ' ' ||
+    coalesce(recall_title, '') || ' ' || coalesce(firm_name, ''));

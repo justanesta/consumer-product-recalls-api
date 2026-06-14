@@ -12,7 +12,7 @@ from fastapi import FastAPI
 from recalls_api import db
 from recalls_api.errors import register_error_handlers
 from recalls_api.logging import RequestIdMiddleware, configure_logging
-from recalls_api.routers import health, recalls
+from recalls_api.routers import health, products, recalls
 from recalls_api.settings import get_settings
 
 _DESCRIPTION = (
@@ -49,7 +49,8 @@ def create_app() -> FastAPI:
 
     app.include_router(health.router)
     app.include_router(recalls.router)
-    # TODO(C6-C7): include products / firms routers as they land.
+    app.include_router(products.router)
+    # TODO(C7): include firms router as it lands.
     # TODO(C9): slowapi limiter + middleware (RateLimitExceeded -> 429 envelope) and
     #           Cache-Control / ETag / Last-Modified keyed off the nightly ~03:00 UTC rebuild.
     return app
