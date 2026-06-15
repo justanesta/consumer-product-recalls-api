@@ -136,3 +136,26 @@ def test_distribution_country_filter_uppercases() -> None:
     f = RecallFilters(None, None, None, None, None, None, distribution_country="mx")
     c = _compiled(q.list_stmt(f, None, 25))
     assert c.params["dist_country"] == ["MX"]
+
+
+def test_search_stmt_uses_fts_and_binds_q() -> None:
+    c = _compiled(
+        q.search_stmt(RecallFilters(None, None, None, None, None, None), "salmonella", None, 25)
+    )
+    assert c.params["q"] == "salmonella"
+    sql = str(c).lower()
+    assert "@@" in sql and "ts_rank_cd" in sql
+
+
+def test_search_stmt_applies_filters() -> None:
+    c = _compiled(
+        q.search_stmt(RecallFilters(Source.FDA, None, None, None, None, None), "acme", None, 25)
+    )
+    assert c.params["q"] == "acme"
+    assert c.params["source"] == "FDA"
+
+
+def test_search_count_stmt_counts_matches() -> None:
+    c = _compiled(q.search_count_stmt(RecallFilters(None, None, None, None, None, None), "fire"))
+    assert c.params["q"] == "fire"
+    assert "COUNT(" in str(c).upper()

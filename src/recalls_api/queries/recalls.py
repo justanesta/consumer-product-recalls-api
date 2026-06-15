@@ -14,7 +14,7 @@ from sqlalchemy import Select
 from sqlalchemy.sql.elements import ColumnElement
 
 from recalls_api.deps import RecallFilters
-from recalls_api.pagination import Cursor, published_at_keyset_where
+from recalls_api.pagination import Cursor, published_at_keyset_where, rank_keyset_where
 
 # Lightweight table literal (no reflection/ORM). Column names per 01 — Mart 1 (authoritative).
 recall_summary = sa.table(
@@ -178,3 +178,39 @@ def list_count_stmt(filters: RecallFilters) -> Select:
     if conds:
         stmt = stmt.where(*conds)
     return stmt
+
+
+# --- Recall-grain FTS (Option B) ---
+_search_vector = sa.literal_column("search_vector")  # tsvector on mart_recall_summary; GIN-indexed
+# Query-time rank weights {D, C, B, A}. The gold setweight buckets are the contract; these numeric
+# multipliers are ours to tune WITHOUT a rebuild. Default = ts_rank_cd's {0.1,0.2,0.4,1.0}:
+# title(A) > brand/product(B) > cause(C) > harm(D).
+_RANK_WEIGHTS = sa.literal_column("'{0.1,0.2,0.4,1.0}'::float4[]")
+
+
+def _tsquery(q: str) -> ColumnElement:
+    # 'english' must be a SQL literal (regconfig overload); a bound param leaves only (text, text)
+    # overload, which does not exist -> runtime error. websearch_to_tsquery is injection-safe.
+    return sa.func.websearch_to_tsquery(sa.literal_column("'english'"), sa.bindparam("q", q))
+
+
+def search_stmt(filters: RecallFilters, q: str, cursor: Cursor | None, limit: int) -> Select:
+    """Recall-grain FTS (GIN @@) ranked by ts_rank_cd; keyset on (rank, recall_event_id)."""
+    tq = _tsquery(q)
+    rank = sa.func.ts_rank_cd(_RANK_WEIGHTS, _search_vector, tq).label("rank")
+    stmt = sa.select(*_LIST_COLS, rank).where(
+        _search_vector.op("@@")(tq), *recalls_predicates(filters)
+    )
+    if cursor is not None:
+        stmt = stmt.where(rank_keyset_where(cursor, rank, recall_summary.c.recall_event_id))
+    return stmt.order_by(rank.desc(), recall_summary.c.recall_event_id.asc()).limit(limit + 1)
+
+
+def search_count_stmt(filters: RecallFilters, q: str) -> Select:
+    """COUNT(*) over the FTS match + filters, for ?with_total=true."""
+    tq = _tsquery(q)
+    return (
+        sa.select(sa.func.count())
+        .select_from(recall_summary)
+        .where(_search_vector.op("@@")(tq), *recalls_predicates(filters))
+    )

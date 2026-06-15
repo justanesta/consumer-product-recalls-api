@@ -49,13 +49,15 @@ create table mart_recall_summary (
     is_currently_active        boolean,
     was_ever_retracted         boolean,
     edit_event_count           bigint      not null,
-    has_been_edited            boolean     not null
+    has_been_edited            boolean     not null,
+    search_vector              tsvector
 );
 
 create index mart_recall_summary_source_published on mart_recall_summary (source, published_at);
 create index mart_recall_summary_is_active on mart_recall_summary (is_active);
 create index mart_recall_summary_classification on mart_recall_summary (classification);
 create index mart_recall_summary_published_desc_evt on mart_recall_summary (published_at desc, recall_event_id);
+create index mart_recall_summary_sv_gin on mart_recall_summary using gin (search_vector);
 
 insert into mart_recall_summary (
     recall_event_id, source, source_recall_id, title, recall_reason, url, announced_at, published_at,
@@ -122,6 +124,24 @@ insert into mart_recall_summary (
  '[{"firm_id": "55555555555555555555555555555555", "name": "Boaty Mfg", "role": "manufacturer", "match_confidence": "uscg_mic_unambiguous"}]',
  1, null, null, '["ABC12345D404"]', '2026-02-10 07:00:00+00', '2026-02-11 07:00:00+00',
  1, null, null, 0, false);
+
+-- Recall-grain FTS vector (Option B): mirrors gold's setweight buckets — A=title,
+-- B=product_names(flattened)+primary_firm_name, C=recall_reason, D=consequence_of_defect.
+-- Populated post-insert (like the product_search vector below).
+update mart_recall_summary set search_vector =
+    setweight(to_tsvector('english', coalesce(title, '')), 'A')
+    || setweight(
+        to_tsvector(
+            'english',
+            coalesce(
+                (select string_agg(elem, ' ') from jsonb_array_elements_text(product_names) t(elem)), ''
+            )
+            || ' ' || coalesce(primary_firm_name, '')
+        ),
+        'B'
+    )
+    || setweight(to_tsvector('english', coalesce(recall_reason, '')), 'C')
+    || setweight(to_tsvector('english', coalesce(consequence_of_defect, '')), 'D');
 
 -- ---------------------------------------------------------------------------------------------------
 -- mart_product_search (C6). One row per recalled product; recall_event_id links to a recall above.
