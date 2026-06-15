@@ -1,7 +1,7 @@
 # Fly.io app config (apps v2). Deploy: `flyctl deploy`. Set the DB secret out-of-band:
 #   flyctl secrets set NEON_DATABASE_URL_RO="postgresql+asyncpg://recalls_readonly:<pw>@<host>/<db>?ssl=require"
-# TODO(operator): set `app` + `primary_region` (a region near your Neon project, e.g. iad for us-east).
-app = "recalls-api"
+# app + primary_region configured: Neon is AWS us-east-1 (N. Virginia) -> Fly iad (same metro).
+app = "consumer-product-recalls-api"
 primary_region = "iad"
 
 [build]
