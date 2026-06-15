@@ -66,7 +66,7 @@
           "recalls"
         ],
         "summary": "List recalls (newest first), with filters and keyset pagination.",
-        "description": "Recalls across CPSC, FDA, USDA, NHTSA, USCG, newest first (`published_at DESC`), keyset (seek) paginated — pass the previous page's `next_cursor` back as `cursor`. Filters AND together: `source`, `classification`, `is_active`, `lifecycle_status`, `distribution_scope`, `source_recall_id`, `firm`, plus the `published_*` and `announced_*` date ranges. Caveats: `classification`/`lifecycle_status` are source-native (not unified); `is_active` and `lifecycle_status` are null for CPSC/NHTSA, so a value filter on either excludes those rows; `announced_at` is nullable, so an `announced_*` filter drops rows lacking it; `source_recall_id` is exact and unique only with `source` (use the detail route); `firm` is an unindexed substring filter. Total is omitted unless `with_total=true`.",
+        "description": "Recalls across CPSC, FDA, USDA, NHTSA, USCG, newest first (`published_at DESC`), keyset (seek) paginated — pass the previous page's `next_cursor` back as `cursor`. Filters AND together: `source`, `classification`, `is_active`, `lifecycle_status`, `distribution_scope`, `distribution_state`, `distribution_country`, `source_recall_id`, `firm`, plus the `published_*` and `announced_*` date ranges. Caveats: `classification`/`lifecycle_status` are source-native (not unified); `is_active`/`lifecycle_status` are null for CPSC/NHTSA (a value filter excludes those rows); `announced_at` is nullable (an `announced_*` filter drops rows lacking it); `distribution_state`/`distribution_country` are FDA/USDA-only and `distribution_country` is foreign-only (`US` excluded by design); `source_recall_id` is exact, unique only with `source` (use the detail route); `firm` is an unindexed substring filter. Total is omitted unless `with_total=true`.",
         "operationId": "list_recalls_recalls_get",
         "parameters": [
           {
@@ -189,17 +189,16 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string",
-                  "maxLength": 64
+                  "$ref": "#/components/schemas/DistributionScope"
                 },
                 {
                   "type": "null"
                 }
               ],
-              "description": "EXACT match on the source-native distribution scope.",
+              "description": "One of the 4 gold distribution scopes (validated; 422 otherwise).",
               "title": "Distribution Scope"
             },
-            "description": "EXACT match on the source-native distribution scope."
+            "description": "One of the 4 gold distribution scopes (validated; 422 otherwise)."
           },
           {
             "name": "lifecycle_status",
@@ -277,6 +276,46 @@
               "title": "Source Recall Id"
             },
             "description": "EXACT agency-native id; unique only when combined with source."
+          },
+          {
+            "name": "distribution_state",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 2,
+                  "maxLength": 2
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "USPS 2-letter code; recalls distributed to this state (FDA/USDA only).",
+              "title": "Distribution State"
+            },
+            "description": "USPS 2-letter code; recalls distributed to this state (FDA/USDA only)."
+          },
+          {
+            "name": "distribution_country",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 2,
+                  "maxLength": 2
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "ISO alpha-2; FOREIGN distribution only ('US' excluded by design).",
+              "title": "Distribution Country"
+            },
+            "description": "ISO alpha-2; FOREIGN distribution only ('US' excluded by design)."
           },
           {
             "name": "limit",
@@ -767,6 +806,17 @@
         "type": "object",
         "title": "DbHealth",
         "description": "Readiness body (returned only when the SELECT 1 round-trip succeeds)."
+      },
+      "DistributionScope": {
+        "type": "string",
+        "enum": [
+          "Nationwide",
+          "Regional",
+          "Unspecified",
+          "International"
+        ],
+        "title": "DistributionScope",
+        "description": "Closed 4-value gold enum (dbt accepted_values; 100% NOT NULL). Free 422 on a bad value."
       },
       "ErrorDetail": {
         "properties": {

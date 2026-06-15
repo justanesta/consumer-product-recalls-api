@@ -115,7 +115,9 @@ def recalls_predicates(filters: RecallFilters) -> list[ColumnElement[bool]]:
     if filters.firm is not None:  # substring; unindexed (02) — accept seq cost
         conds.append(c.primary_firm_name.ilike(sa.bindparam("firm", f"%{filters.firm}%")))
     if filters.distribution_scope is not None:  # NOT NULL 4-value enum
-        conds.append(c.distribution_scope == sa.bindparam("dist_scope", filters.distribution_scope))
+        conds.append(
+            c.distribution_scope == sa.bindparam("dist_scope", filters.distribution_scope.value)
+        )
     if filters.lifecycle_status is not None:  # NULL for CPSC/NHTSA -> excluded
         conds.append(c.lifecycle_status == sa.bindparam("lifecycle", filters.lifecycle_status))
     if filters.announced_after is not None:  # announced_at NULLABLE -> NULL rows excluded
@@ -128,6 +130,22 @@ def recalls_predicates(filters: RecallFilters) -> list[ColumnElement[bool]]:
     if filters.source_recall_id is not None:  # EXACT; unique only with source
         conds.append(
             c.source_recall_id == sa.bindparam("source_recall_id", filters.source_recall_id)
+        )
+    if filters.distribution_state is not None:  # array containment (GIN @>); FDA/USDA only
+        conds.append(
+            c.distribution_state_codes.op("@>")(
+                sa.bindparam(
+                    "dist_state", [filters.distribution_state.upper()], type_=sa.ARRAY(sa.Text)
+                )
+            )
+        )
+    if filters.distribution_country is not None:  # foreign-only; 'US' never present (by design)
+        conds.append(
+            c.distribution_country_codes.op("@>")(
+                sa.bindparam(
+                    "dist_country", [filters.distribution_country.upper()], type_=sa.ARRAY(sa.Text)
+                )
+            )
         )
     return conds
 

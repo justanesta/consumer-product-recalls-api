@@ -8,7 +8,7 @@ from datetime import date, datetime
 from sqlalchemy.dialects import postgresql
 
 from recalls_api.deps import RecallFilters
-from recalls_api.models.common import Source
+from recalls_api.models.common import DistributionScope, Source
 from recalls_api.pagination import Cursor, published_at_keyset_where
 from recalls_api.queries import recalls as q
 
@@ -93,8 +93,10 @@ def test_count_stmt_reuses_predicates() -> None:
     assert "COUNT(" in str(c).upper()
 
 
-def test_distribution_scope_filter_binds_value() -> None:
-    f = RecallFilters(None, None, None, None, None, None, distribution_scope="Regional")
+def test_distribution_scope_filter_binds_enum_value() -> None:
+    f = RecallFilters(
+        None, None, None, None, None, None, distribution_scope=DistributionScope.REGIONAL
+    )
     c = _compiled(q.list_stmt(f, None, 25))
     assert c.params["dist_scope"] == "Regional"
 
@@ -121,3 +123,16 @@ def test_source_recall_id_filter_uses_equality() -> None:
     f = RecallFilters(None, None, None, None, None, None, source_recall_id="F-1001")
     c = _compiled(q.list_stmt(f, None, 25))
     assert c.params["source_recall_id"] == "F-1001"
+
+
+def test_distribution_state_filter_uppercases_and_uses_array_contains() -> None:
+    f = RecallFilters(None, None, None, None, None, None, distribution_state="ca")
+    c = _compiled(q.list_stmt(f, None, 25))
+    assert c.params["dist_state"] == ["CA"]  # normalized to uppercase
+    assert "@>" in str(c)
+
+
+def test_distribution_country_filter_uppercases() -> None:
+    f = RecallFilters(None, None, None, None, None, None, distribution_country="mx")
+    c = _compiled(q.list_stmt(f, None, 25))
+    assert c.params["dist_country"] == ["MX"]

@@ -14,7 +14,7 @@ from typing import Annotated
 from fastapi import Depends, Query
 
 from recalls_api.db import get_conn as get_conn  # re-export; tests override deps.get_conn
-from recalls_api.models.common import Source
+from recalls_api.models.common import DistributionScope, Source
 from recalls_api.pagination import Cursor
 from recalls_api.settings import Settings, get_settings
 
@@ -52,11 +52,14 @@ class RecallFilters:
     published_before: date | None
     firm: str | None
     # Dimension filters (defaulted so existing positional constructions stay valid).
-    distribution_scope: str | None = None
+    distribution_scope: DistributionScope | None = None
     lifecycle_status: str | None = None
     announced_after: date | None = None
     announced_before: date | None = None
     source_recall_id: str | None = None
+    # Geo array-containment filters (GIN-backed upstream).
+    distribution_state: str | None = None
+    distribution_country: str | None = None
 
 
 def recall_filters(
@@ -80,8 +83,8 @@ def recall_filters(
         Query(min_length=2, max_length=200, description="Case-insensitive substring (unindexed)."),
     ] = None,
     distribution_scope: Annotated[
-        str | None,
-        Query(max_length=64, description="EXACT match on the source-native distribution scope."),
+        DistributionScope | None,
+        Query(description="One of the 4 gold distribution scopes (validated; 422 otherwise)."),
     ] = None,
     lifecycle_status: Annotated[
         str | None,
@@ -108,6 +111,22 @@ def recall_filters(
             description="EXACT agency-native id; unique only when combined with source.",
         ),
     ] = None,
+    distribution_state: Annotated[
+        str | None,
+        Query(
+            min_length=2,
+            max_length=2,
+            description="USPS 2-letter code; recalls distributed to this state (FDA/USDA only).",
+        ),
+    ] = None,
+    distribution_country: Annotated[
+        str | None,
+        Query(
+            min_length=2,
+            max_length=2,
+            description="ISO alpha-2; FOREIGN distribution only ('US' excluded by design).",
+        ),
+    ] = None,
 ) -> RecallFilters:
     return RecallFilters(
         source=source,
@@ -121,4 +140,6 @@ def recall_filters(
         announced_after=announced_after,
         announced_before=announced_before,
         source_recall_id=source_recall_id,
+        distribution_state=distribution_state,
+        distribution_country=distribution_country,
     )

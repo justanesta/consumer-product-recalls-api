@@ -102,6 +102,28 @@ async def test_dimension_filters_and_together(client: AsyncClient) -> None:
     assert ids == {"F-1001", "F-1006"}
 
 
+async def test_filter_by_distribution_state(client: AsyncClient) -> None:
+    # U-2002 is distributed to {CA, OR, WA}; matching is case-insensitive.
+    hit = await client.get("/recalls", params={"distribution_state": "ca", "limit": 100})
+    assert {it["source_recall_id"] for it in hit.json()["items"]} == {"U-2002"}
+    miss = await client.get("/recalls", params={"distribution_state": "NY", "limit": 100})
+    assert miss.json()["items"] == []
+
+
+async def test_filter_by_distribution_country_foreign_only(client: AsyncClient) -> None:
+    # U-2002 is distributed to {MX, GB}; 'US' is never present (excluded from gold by design).
+    hit = await client.get("/recalls", params={"distribution_country": "mx", "limit": 100})
+    assert {it["source_recall_id"] for it in hit.json()["items"]} == {"U-2002"}
+    us = await client.get("/recalls", params={"distribution_country": "US", "limit": 100})
+    assert us.json()["items"] == []  # US is excluded by design, so this is always empty
+
+
+async def test_distribution_scope_invalid_value_returns_422(client: AsyncClient) -> None:
+    r = await client.get("/recalls", params={"distribution_scope": "Galaxywide"})
+    assert r.status_code == 422
+    assert r.json()["error"]["type"] == "invalid_parameter"
+
+
 async def test_with_total(client: AsyncClient) -> None:
     r = await client.get("/recalls", params={"source": "FDA", "with_total": "true", "limit": 100})
     assert r.json()["total"] == 2

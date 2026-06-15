@@ -20,6 +20,15 @@ class Source(StrEnum):
     USCG = "USCG"
 
 
+class DistributionScope(StrEnum):
+    """Closed 4-value gold enum (dbt accepted_values; 100% NOT NULL). Free 422 on a bad value."""
+
+    NATIONWIDE = "Nationwide"
+    REGIONAL = "Regional"
+    UNSPECIFIED = "Unspecified"
+    INTERNATIONAL = "International"
+
+
 class Page[T](BaseModel):
     """Keyset-pagination envelope. ``next_cursor`` is opaque; clients echo it."""
 
