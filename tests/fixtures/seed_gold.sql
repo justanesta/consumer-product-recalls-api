@@ -97,7 +97,7 @@ insert into mart_recall_summary (
 (md5('USDA|U-2002'), 'USDA', 'U-2002', 'Tyson Frozen Chicken Strips Recall', 'Possible foreign matter',
  'https://example.test/usda/U-2002', '2026-04-15 00:00:00+00', '2026-04-15 08:00:00+00',
  'Class II', 'Low - Class II', 'Closed Recall', false, 'Other Contamination', 'Regional',
- 'CA, OR, WA', '{CA,OR,WA}', null, null, null,
+ 'CA, OR, WA', '{CA,OR,WA}', '{MX,GB}', null, null,
  'Return to place of purchase', 'Choking hazard', 'Tyson Foods', 2,
  '[{"firm_id": "22222222222222222222222222222222", "name": "Tyson Foods", "role": "establishment", "match_confidence": "usda_unambiguous"}, {"firm_id": "33333333333333333333333333333333", "name": "Cold Storage Co", "role": "distributor", "match_confidence": "name_variant_exact"}]',
  1, '["Frozen Chicken Strips 24oz"]', null, null, '2026-04-15 09:00:00+00', '2026-04-16 09:00:00+00',
