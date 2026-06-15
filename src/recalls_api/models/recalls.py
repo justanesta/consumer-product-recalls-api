@@ -39,6 +39,14 @@ class RecallSummary(BaseModel):
     has_been_edited: bool = False
 
 
+class RecallSearchHit(RecallSummary):
+    """A ``RecallSummary`` plus its FTS relevance ``rank`` (``GET /recalls/search``)."""
+
+    rank: float = Field(
+        description="ts_rank_cd relevance; higher = better, not comparable across queries."
+    )
+
+
 class RecallDetail(BaseModel):
     """The full wide row: summary subset + narrative, geo, lifecycle, and the jsonb rollups."""
 

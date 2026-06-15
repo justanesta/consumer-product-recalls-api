@@ -124,6 +124,78 @@ async def test_distribution_scope_invalid_value_returns_422(client: AsyncClient)
     assert r.json()["error"]["type"] == "invalid_parameter"
 
 
+async def test_search_keyword_matches_recall(client: AsyncClient) -> None:
+    r = await client.get("/recalls/search", params={"q": "salmonella", "limit": 100})
+    assert r.status_code == 200
+    assert {it["source_recall_id"] for it in r.json()["items"]} == {"F-1001"}
+
+
+async def test_search_brand_name_match(client: AsyncClient) -> None:
+    # "tyson" lives in the firm + folded product names, not just the title -> proves the fold works.
+    r = await client.get("/recalls/search", params={"q": "tyson", "limit": 100})
+    assert {it["source_recall_id"] for it in r.json()["items"]} == {"U-2002"}
+
+
+async def test_search_ranks_title_above_narrative(client: AsyncClient) -> None:
+    # "hazard": title (A) for 24-003 vs consequence (D) for USCG-005 + U-2002 -> 24-003 first.
+    items = (await client.get("/recalls/search", params={"q": "hazard", "limit": 100})).json()[
+        "items"
+    ]
+    ids = [it["source_recall_id"] for it in items]
+    assert set(ids) == {"24-003", "USCG-005", "U-2002"}
+    assert ids[0] == "24-003"  # the title (A) match outranks both consequence (D) matches
+    assert items[0]["rank"] >= items[1]["rank"]
+
+
+async def test_search_filters_and_in(client: AsyncClient) -> None:
+    r = await client.get("/recalls/search", params={"q": "hazard", "source": "CPSC", "limit": 100})
+    assert {it["source_recall_id"] for it in r.json()["items"]} == {"24-003"}
+
+
+async def test_search_q_too_short_returns_422(client: AsyncClient) -> None:
+    r = await client.get("/recalls/search", params={"q": "a"})
+    assert r.status_code == 422
+    assert r.json()["error"]["type"] == "invalid_parameter"
+
+
+async def test_search_no_match_is_empty(client: AsyncClient) -> None:
+    r = await client.get("/recalls/search", params={"q": "zzqqxx", "limit": 100})
+    assert r.status_code == 200
+    assert r.json()["items"] == []
+
+
+async def test_search_garbage_query_is_injection_safe(client: AsyncClient) -> None:
+    # websearch_to_tsquery never raises on operator-y/garbage input -> 200, not 500.
+    r = await client.get("/recalls/search", params={"q": "'); drop table mart_recall_summary; --"})
+    assert r.status_code == 200
+
+
+async def test_search_keyset_pagination(client: AsyncClient) -> None:
+    # "acme" matches both FDA Acme recalls; walk one-at-a-time without overlap.
+    seen: list[str] = []
+    cursor: str | None = None
+    for _ in range(5):  # safety bound
+        params: dict[str, str | int] = {"q": "acme", "limit": 1}
+        if cursor:
+            params["cursor"] = cursor
+        body = (await client.get("/recalls/search", params=params)).json()
+        seen.extend(it["source_recall_id"] for it in body["items"])
+        cursor = body["next_cursor"]
+        if cursor is None:
+            break
+    assert set(seen) == {"F-1001", "F-1006"}
+    assert len(seen) == 2  # no overlap
+
+
+async def test_search_with_total(client: AsyncClient) -> None:
+    r = await client.get(
+        "/recalls/search", params={"q": "acme", "with_total": "true", "limit": 100}
+    )
+    body = r.json()
+    assert {it["source_recall_id"] for it in body["items"]} == {"F-1001", "F-1006"}
+    assert body["total"] == 2  # exercises search_count_stmt end-to-end
+
+
 async def test_with_total(client: AsyncClient) -> None:
     r = await client.get("/recalls", params={"source": "FDA", "with_total": "true", "limit": 100})
     assert r.json()["total"] == 2

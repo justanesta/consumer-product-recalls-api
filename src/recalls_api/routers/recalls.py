@@ -4,15 +4,15 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Path
+from fastapi import APIRouter, Depends, Path, Query
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from recalls_api import deps
 from recalls_api.errors import ITEM_ERRORS, LIST_ERRORS, InvalidParameter, ResourceNotFound
 from recalls_api.models.common import Page, Source
-from recalls_api.models.recalls import RecallDetail, RecallSummary
+from recalls_api.models.recalls import RecallDetail, RecallSearchHit, RecallSummary
 from recalls_api.pagination import Cursor, build_page, slice_page
-from recalls_api.queries import recalls as q
+from recalls_api.queries import recalls as rq
 
 router = APIRouter(prefix="/recalls", tags=["recalls"])
 
@@ -36,6 +36,14 @@ _DETAIL_DESC = (
     "CPSC/NHTSA; `distribution_states` is agency prose (a scalar string), distinct from the parsed "
     "`distribution_state_codes`."
 )
+_SEARCH_DESC = (
+    "Recall-grain keyword search — Postgres full-text over the recall's title, product names, "
+    "firm, and narrative (reason/consequence), ranked by relevance (`rank` = `ts_rank_cd`). "
+    "Token/prefix matching only; NO fuzzy/typo search. Unlike `/products/search` (product grain, "
+    "identifiers + UPC), this returns one row per recall, each linking to its detail route. All "
+    "`/recalls` filters AND-in. Relevance-ordered keyset is not index-backed (the GIN serves the "
+    "`@@` match, not the sort); the sort is over the matched set."
+)
 
 
 @router.get(
@@ -50,7 +58,7 @@ async def list_recalls(
     filters: Annotated[deps.RecallFilters, Depends(deps.recall_filters)],
     page: Annotated[deps.PaginationParams, Depends(deps.pagination_params)],
 ) -> Page[RecallSummary]:
-    rows = list((await conn.execute(q.list_stmt(filters, page.cursor, page.limit))).mappings())
+    rows = list((await conn.execute(rq.list_stmt(filters, page.cursor, page.limit))).mappings())
     page_rows, has_next = slice_page(rows, page.limit)
     next_cursor = (
         Cursor(
@@ -61,8 +69,38 @@ async def list_recalls(
     )
     total = None
     if page.with_total:
-        total = (await conn.execute(q.list_count_stmt(filters))).scalar_one()
+        total = (await conn.execute(rq.list_count_stmt(filters))).scalar_one()
     items = [RecallSummary.model_validate(dict(r)) for r in page_rows]
+    return build_page(items, limit=page.limit, next_cursor=next_cursor, total=total)
+
+
+@router.get(
+    "/search",
+    response_model=Page[RecallSearchHit],
+    responses=LIST_ERRORS,
+    summary="Search recalls by keyword (recall-grain full-text), with the same filters.",
+    description=_SEARCH_DESC,
+)
+async def search_recalls(
+    conn: Annotated[AsyncConnection, Depends(deps.get_conn)],
+    filters: Annotated[deps.RecallFilters, Depends(deps.recall_filters)],
+    page: Annotated[deps.PaginationParams, Depends(deps.pagination_params)],
+    q: Annotated[
+        str, Query(min_length=2, max_length=200, description="Keywords (Postgres websearch).")
+    ],
+) -> Page[RecallSearchHit]:
+    stmt = rq.search_stmt(filters, q, page.cursor, page.limit)
+    rows = list((await conn.execute(stmt)).mappings())
+    page_rows, has_next = slice_page(rows, page.limit)
+    next_cursor = (
+        Cursor((page_rows[-1]["rank"], page_rows[-1]["recall_event_id"])).encode()
+        if has_next and page_rows
+        else None
+    )
+    total = None
+    if page.with_total:
+        total = (await conn.execute(rq.search_count_stmt(filters, q))).scalar_one()
+    items = [RecallSearchHit.model_validate(dict(r)) for r in page_rows]
     return build_page(items, limit=page.limit, next_cursor=next_cursor, total=total)
 
 
@@ -86,7 +124,7 @@ async def get_recall(
     except ValueError as exc:
         valid = ", ".join(s.value for s in Source)
         raise InvalidParameter(f"unknown source {source!r}; expected one of: {valid}") from exc
-    row = (await conn.execute(q.detail_stmt(src.value, recall_id))).mappings().one_or_none()
+    row = (await conn.execute(rq.detail_stmt(src.value, recall_id))).mappings().one_or_none()
     if row is None:
         raise ResourceNotFound(f"no recall for {src.value}/{recall_id}")
     return RecallDetail.model_validate(dict(row))

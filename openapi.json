@@ -416,6 +416,375 @@
         }
       }
     },
+    "/recalls/search": {
+      "get": {
+        "tags": [
+          "recalls"
+        ],
+        "summary": "Search recalls by keyword (recall-grain full-text), with the same filters.",
+        "description": "Recall-grain keyword search — Postgres full-text over the recall's title, product names, firm, and narrative (reason/consequence), ranked by relevance (`rank` = `ts_rank_cd`). Token/prefix matching only; NO fuzzy/typo search. Unlike `/products/search` (product grain, identifiers + UPC), this returns one row per recall, each linking to its detail route. All `/recalls` filters AND-in. Relevance-ordered keyset is not index-backed (the GIN serves the `@@` match, not the sort); the sort is over the matched set.",
+        "operationId": "search_recalls_recalls_search_get",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 2,
+              "maxLength": 200,
+              "description": "Keywords (Postgres websearch).",
+              "title": "Q"
+            },
+            "description": "Keywords (Postgres websearch)."
+          },
+          {
+            "name": "source",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/Source"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by issuing agency.",
+              "title": "Source"
+            },
+            "description": "Filter by issuing agency."
+          },
+          {
+            "name": "classification",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 64
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "EXACT match on the source-native classification string.",
+              "title": "Classification"
+            },
+            "description": "EXACT match on the source-native classification string."
+          },
+          {
+            "name": "is_active",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Tri-state; CPSC/NHTSA carry null and match neither true nor false.",
+              "title": "Is Active"
+            },
+            "description": "Tri-state; CPSC/NHTSA carry null and match neither true nor false."
+          },
+          {
+            "name": "published_after",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Inclusive from the START of that calendar day.",
+              "title": "Published After"
+            },
+            "description": "Inclusive from the START of that calendar day."
+          },
+          {
+            "name": "published_before",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Inclusive of the ENTIRE published_before calendar day.",
+              "title": "Published Before"
+            },
+            "description": "Inclusive of the ENTIRE published_before calendar day."
+          },
+          {
+            "name": "firm",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 2,
+                  "maxLength": 200
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Case-insensitive substring (unindexed).",
+              "title": "Firm"
+            },
+            "description": "Case-insensitive substring (unindexed)."
+          },
+          {
+            "name": "distribution_scope",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/DistributionScope"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "One of the 4 gold distribution scopes (validated; 422 otherwise).",
+              "title": "Distribution Scope"
+            },
+            "description": "One of the 4 gold distribution scopes (validated; 422 otherwise)."
+          },
+          {
+            "name": "lifecycle_status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 64
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "EXACT match; source-native, null for CPSC/NHTSA (excludes those rows).",
+              "title": "Lifecycle Status"
+            },
+            "description": "EXACT match; source-native, null for CPSC/NHTSA (excludes those rows)."
+          },
+          {
+            "name": "announced_after",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "announced_at >= start of that day (UTC); null-announced rows excluded.",
+              "title": "Announced After"
+            },
+            "description": "announced_at >= start of that day (UTC); null-announced rows excluded."
+          },
+          {
+            "name": "announced_before",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Inclusive of the whole announced_before day; nulls excluded.",
+              "title": "Announced Before"
+            },
+            "description": "Inclusive of the whole announced_before day; nulls excluded."
+          },
+          {
+            "name": "source_recall_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "EXACT agency-native id; unique only when combined with source.",
+              "title": "Source Recall Id"
+            },
+            "description": "EXACT agency-native id; unique only when combined with source."
+          },
+          {
+            "name": "distribution_state",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 2,
+                  "maxLength": 2
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "USPS 2-letter code; recalls distributed to this state (FDA/USDA only).",
+              "title": "Distribution State"
+            },
+            "description": "USPS 2-letter code; recalls distributed to this state (FDA/USDA only)."
+          },
+          {
+            "name": "distribution_country",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 2,
+                  "maxLength": 2
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "ISO alpha-2; FOREIGN distribution only ('US' excluded by design).",
+              "title": "Distribution Country"
+            },
+            "description": "ISO alpha-2; FOREIGN distribution only ('US' excluded by design)."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "description": "Page size (max 100).",
+              "default": 25,
+              "title": "Limit"
+            },
+            "description": "Page size (max 100)."
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Opaque cursor from a prior next_cursor.",
+              "title": "Cursor"
+            },
+            "description": "Opaque cursor from a prior next_cursor."
+          },
+          {
+            "name": "with_total",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Also compute total (extra COUNT).",
+              "default": false,
+              "title": "With Total"
+            },
+            "description": "Also compute total (extra COUNT)."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_RecallSearchHit_"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "BadCursor.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "InvalidParameter.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "UpstreamUnavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "RateLimited.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/recalls/{source}/{recall_id}": {
       "get": {
         "tags": [
@@ -1240,6 +1609,59 @@
         ],
         "title": "Page[ProductSearchHit]"
       },
+      "Page_RecallSearchHit_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/RecallSearchHit"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor",
+            "examples": [
+              "eyJ2IjpbIjIwMjYtMDEtMDEiLCJhYmMiXX0"
+            ]
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit",
+            "examples": [
+              25
+            ]
+          },
+          "total": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total",
+            "description": "Only when with_total=true.",
+            "examples": [
+              null
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "limit"
+        ],
+        "title": "Page[RecallSearchHit]"
+      },
       "Page_RecallSummary_": {
         "properties": {
           "items": {
@@ -1840,6 +2262,182 @@
         ],
         "title": "RecallDetail",
         "description": "The full wide row: summary subset + narrative, geo, lifecycle, and the jsonb rollups."
+      },
+      "RecallSearchHit": {
+        "properties": {
+          "recall_event_id": {
+            "type": "string",
+            "title": "Recall Event Id"
+          },
+          "source": {
+            "$ref": "#/components/schemas/Source"
+          },
+          "source_recall_id": {
+            "type": "string",
+            "title": "Source Recall Id",
+            "examples": [
+              "24-001"
+            ]
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title",
+            "examples": [
+              "Acme Toaster Fire Hazard"
+            ]
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
+          "announced_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Announced At"
+          },
+          "published_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Published At"
+          },
+          "classification": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Classification",
+            "examples": [
+              "Class II"
+            ]
+          },
+          "risk_level": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Risk Level",
+            "examples": [
+              "Low - Class II"
+            ]
+          },
+          "lifecycle_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lifecycle Status"
+          },
+          "is_active": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Active",
+            "description": "Tri-state; null for CPSC/NHTSA."
+          },
+          "reason_category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason Category"
+          },
+          "distribution_scope": {
+            "type": "string",
+            "title": "Distribution Scope",
+            "examples": [
+              "Nationwide"
+            ]
+          },
+          "primary_firm_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Primary Firm Name"
+          },
+          "firm_count": {
+            "type": "integer",
+            "title": "Firm Count",
+            "default": 0
+          },
+          "product_count": {
+            "type": "integer",
+            "title": "Product Count",
+            "default": 0
+          },
+          "edit_event_count": {
+            "type": "integer",
+            "title": "Edit Event Count",
+            "default": 0
+          },
+          "has_been_edited": {
+            "type": "boolean",
+            "title": "Has Been Edited",
+            "default": false
+          },
+          "rank": {
+            "type": "number",
+            "title": "Rank",
+            "description": "ts_rank_cd relevance; higher = better, not comparable across queries."
+          }
+        },
+        "type": "object",
+        "required": [
+          "recall_event_id",
+          "source",
+          "source_recall_id",
+          "published_at",
+          "distribution_scope",
+          "rank"
+        ],
+        "title": "RecallSearchHit",
+        "description": "A ``RecallSummary`` plus its FTS relevance ``rank`` (``GET /recalls/search``)."
       },
       "RecallSummary": {
         "properties": {
