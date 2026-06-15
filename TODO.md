@@ -44,3 +44,16 @@ accepts depends on whether the command **talks to a remote** or **reads a local 
 - Hook: "I assumed `origin/feature` and `origin feature` were the same for years — until one errored."
 - Core: space = `(remote, refspec)` for network verbs; slash = one remote-tracking ref for local verbs.
 - Payoff: one rule + a table of which commands take which form, and the two classic error messages decoded.
+
+## Features
+
+### `/recalls` sort control — `sort` + `order` params
+
+- [ ] Add a `sort=published_at|announced_at` + `order=asc|desc` pair to `GET /recalls`. Small, clean, and
+low-risk: the R2 index `(published_at DESC, recall_event_id)` backs both directions (Postgres scans
+it backward for ASC), so the change is just flipping the `ORDER BY` direction and the keyset
+comparison direction (`<` for DESC → `>` for ASC). Fully keyset-compatible.
+
+Deferred — recency sort on `/recalls/search`: it's intentionally relevance-ranked (`ts_rank_cd
+DESC`), which fits that endpoint's use case. Adding a date sort there is a bigger change (needs a
+mode-aware cursor toggling relevance vs recency), so not now.

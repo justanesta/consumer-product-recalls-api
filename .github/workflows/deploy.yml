@@ -19,10 +19,10 @@ jobs:
       group: deploy-production
       cancel-in-progress: false
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           ref: ${{ github.event.workflow_run.head_sha }} # deploy exactly the commit CI passed
-      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - uses: superfly/flyctl-actions/setup-flyctl@1.5
       - name: Fly deploy
         run: flyctl deploy --remote-only --build-arg GIT_SHA="${{ github.event.workflow_run.head_sha }}"
         env:

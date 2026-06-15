@@ -34,7 +34,7 @@ jobs:
       TEST_DATABASE_URL: postgresql+asyncpg://test:test@localhost:5432/test
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install uv
         uses: astral-sh/setup-uv@v6
