@@ -104,20 +104,9 @@ curl -sSf https://consumer-product-recalls-api.fly.dev/openapi.json -o public/op
 
 The API is **open, no authentication required**. All endpoints are `GET`. No API key, no `Authorization` header.
 
-**CORS — not yet configured (blocker for browser islands).** `src/recalls_api/main.py` wires `CacheControlMiddleware`, `SlowAPIMiddleware`, and `RequestIdMiddleware` only; `CORSMiddleware` is absent and no `Access-Control-*` headers are emitted. The fix is to add it in `create_app()` before the other middleware:
+**CORS — open (`Access-Control-Allow-Origin: *`).** `src/recalls_api/main.py` adds `CORSMiddleware` as the outermost layer with `allow_origins=["*"]`, `allow_methods=["GET"]`, so any browser origin may read responses. This is intentional for a public, read-only, credential-free API — see [ADR 0014](decisions/0014-open-cors-public-read-only-api.md). Browser `fetch()`/`XMLHttpRequest` from the website, including the Scalar interactive island, works directly against `https://consumer-product-recalls-api.fly.dev` with no proxy.
 
-```python
-from fastapi.middleware.cors import CORSMiddleware
-
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["GET"])
-```
-
-Until that lands, **browser-originated cross-origin requests will be blocked by the browser's same-origin policy.** This means the Scalar interactive island and any direct `fetch()`/`XMLHttpRequest` calls from the website will fail. Workarounds until the fix ships:
-
-- **Server-side proxy** — have the Astro server route proxy the API call (no CORS restriction applies server-to-server).
-- **CDN/edge header injection** — configure the CDN to inject `Access-Control-Allow-Origin: *` on API responses.
-
-Do not tell site visitors the API is callable directly from a browser until `CORSMiddleware` is deployed.
+Because the middleware is outermost, the headers land on every response, so error and rate-limit (429) bodies are readable cross-origin too. The API is credential-free: do **not** set `credentials: "include"` on the client — with an `*` origin the browser rejects the response, and there are no cookies to send.
 
 ### Theming
 
@@ -141,7 +130,7 @@ The Starlight default theme adapts cleanly to dark/light. Match the website's co
 | Error envelope shape | `openapi.json` (every error response uses `ErrorEnvelope` schema) — rendered automatically |
 | Pagination mechanics (`next_cursor`, `limit`, `with_total`) | Authored MDX on `/api/pagination/`, sourced from [`api-reference.md`](api-reference.md) §Pagination |
 | Honest caveats (`is_active` tri-state, source-native classification, recall-level UPCs, no fuzzy search) | Authored MDX on `/api/caveats/`, sourced from [`api-reference.md`](api-reference.md) §Caveats |
-| Base URL, open-API note, CORS status (blocked until `CORSMiddleware` is deployed — see Authentication and CORS above) | Authored MDX on `/api/` overview page |
+| Base URL, open-API note, CORS status (open `*` — see Authentication and CORS above) | Authored MDX on `/api/` overview page |
 | Changelog | Authored MDX on `/api/changelog/` — updated manually on breaking changes |
 
 ---

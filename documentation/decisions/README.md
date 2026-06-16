@@ -28,6 +28,10 @@ Write an ADR when someone reading the code six months later would ask "why this 
 - [0003 — Uniform error envelope](./0003-uniform-error-envelope.md) — `{"error":{"type","detail","request_id"}}` on every non-2xx; cold-DB → 503 + `Retry-After: 5`; catch-all → opaque 500; traceback to logs only
 - [0010 — Committed `openapi.json` snapshot as drift-detection contract](./0010-openapi-committed-snapshot-drift-contract.md) — generator (`recalls_api.export_openapi`) is source of truth; snapshot checked into repo; pre-commit + CI fail on drift
 
+### Browser access (CORS)
+
+- [0014 — Open CORS for the public, read-only API](./0014-open-cors-public-read-only-api.md) — `CORSMiddleware` outermost with `allow_origins=["*"]`, `allow_methods=["GET"]`; safe because the API is public + credential-free; enables direct browser `fetch()` from the website
+
 ### Pagination
 
 - [0004 — Keyset (seek) pagination](./0004-keyset-cursor-codec.md) — opaque base64url 2-tuple cursor; two shapes (`published_at DESC, id ASC` and `rank DESC, id ASC`); tampered payload → 400 before DB
@@ -80,6 +84,7 @@ Write an ADR when someone reading the code six months later would ask "why this 
 | [0011](./0011-recall-grain-fts-option-b.md) | Recall-grain full-text search (Option B): `search_vector` on `mart_recall_summary`, `ts_rank_cd` weighting | Search |
 | [0012](./0012-health-readiness-split.md) | Health/readiness split: DB-free `/health` liveness vs `SELECT 1` `/health/db` readiness | Operational / Deployment |
 | [0013](./0013-ci-gated-workflow-run-auto-deploy.md) | CI-gated auto-deploy: `workflow_run` trigger on CI success; scale-to-zero on Fly.io | CI/CD |
+| [0014](./0014-open-cors-public-read-only-api.md) | Open CORS for the public, read-only API: `CORSMiddleware` outermost, `allow_origins=["*"]`, GET-only | Browser access (CORS) |
 
 ---
 
@@ -98,7 +103,7 @@ The following decisions were made in the pipeline repo and govern this API repo.
 
 ## Writing new ADRs
 
-1. Pick the next sequential number. **The next free number is `0014`.** (This line is the single source of truth — do not reserve numbers in plan docs.)
+1. Pick the next sequential number. **The next free number is `0015`.** (This line is the single source of truth — do not reserve numbers in plan docs.)
 2. File name: `NNNN-kebab-case-title.md`.
 3. Use the Nygard template: **Status / Date / Context / Decision / Consequences**. Any existing ADR is a valid model.
 4. Add an entry under the appropriate topic section above **and** in the numeric table.
