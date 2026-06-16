@@ -106,7 +106,7 @@ The API is **open, no authentication required**. All endpoints are `GET`. No API
 
 **CORS — open (`Access-Control-Allow-Origin: *`).** `src/recalls_api/main.py` adds `CORSMiddleware` as the outermost layer with `allow_origins=["*"]`, `allow_methods=["GET"]`, so any browser origin may read responses. This is intentional for a public, read-only, credential-free API — see [ADR 0014](decisions/0014-open-cors-public-read-only-api.md). Browser `fetch()`/`XMLHttpRequest` from the website, including the Scalar interactive island, works directly against `https://consumer-product-recalls-api.fly.dev` with no proxy.
 
-Because the middleware is outermost, the headers land on every response, so error and rate-limit (429) bodies are readable cross-origin too. The API is credential-free: do **not** set `credentials: "include"` on the client — with an `*` origin the browser rejects the response, and there are no cookies to send.
+Because the middleware is outermost, the headers land on every response, so error and rate-limit (429) bodies are readable cross-origin too. The response also exposes `Retry-After`, `ETag`, and `X-Request-ID` (via `Access-Control-Expose-Headers`) so client JS can read them — use `Retry-After` to back off on a 429/503 and `X-Request-ID` to correlate an error with the API's logs. The API is credential-free: do **not** set `credentials: "include"` on the client — with an `*` origin the browser rejects the response, and there are no cookies to send.
 
 ### Theming
 

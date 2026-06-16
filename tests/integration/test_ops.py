@@ -23,6 +23,10 @@ async def test_cors_allow_origin_on_get(client: AsyncClient) -> None:
     r = await client.get("/health", headers={"Origin": "https://example.com"})
     assert r.status_code == 200
     assert r.headers["access-control-allow-origin"] == "*"
+    # Non-safelisted headers the browser is allowed to read cross-origin.
+    exposed = r.headers["access-control-expose-headers"].lower()
+    assert "x-request-id" in exposed
+    assert "retry-after" in exposed
 
 
 async def test_cors_preflight_allows_get(client: AsyncClient) -> None:

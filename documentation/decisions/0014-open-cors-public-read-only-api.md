@@ -13,12 +13,19 @@ This API is **public, read-only (GET only), and credential-free** — no auth, n
 Add Starlette's `CORSMiddleware` in `create_app()` (`src/recalls_api/main.py`) as the **outermost** middleware (added last):
 
 ```python
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["GET"], allow_headers=["*"])
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["GET"],
+    allow_headers=["*"],
+    expose_headers=["Retry-After", "ETag", "X-Request-ID"],
+)
 ```
 
 1. **`allow_origins=["*"]`, not an origin allowlist.** The obvious alternative — restrict to the known website domain — buys nothing here: the data is public, so `*` exposes only what `curl` already exposes. An allowlist would add a config surface and a deploy-time coupling between this repo and the website's domain for no security gain, and it would misrepresent a genuinely public open-data API.
 2. **Outermost placement** so the `Access-Control-*` headers are applied to every handled response — including 4xx/5xx error envelopes and 429 rate-limit responses — so browser clients can read those bodies too.
 3. **No credentials.** `allow_credentials` is left at its `False` default. `*`-origin combined with credentials is the one combination browsers reject; since the API has no cookies/auth, credentials never apply.
+4. **`expose_headers`.** `Retry-After`, `ETag`, and `X-Request-ID` are not CORS-safelisted, so browser JS cannot read them without this. Exposing them lets a browser client honor backoff (`Retry-After` on 429/503), do manual conditional GETs (`ETag`), and surface a `X-Request-ID` to correlate a failed request with the structlog output. Request headers are unrestricted (`allow_headers=["*"]`) since GET carries none that matter.
 
 ## Consequences
 

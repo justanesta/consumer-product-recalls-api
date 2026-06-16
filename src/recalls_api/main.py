@@ -89,16 +89,18 @@ def create_app() -> FastAPI:
     app.add_middleware(SlowAPIMiddleware)
     app.add_middleware(RequestIdMiddleware)
 
-    # Open CORS, added LAST (outermost): the API is public, read-only, and credential-free, so
-    # any browser origin may read responses (it exposes only what an unauthenticated curl already
-    # can). Outermost placement puts the Access-Control-* headers on every handled response. `*` is
-    # safe here precisely because there are no cookies/auth (no CSRF or credential-leak vector), and
-    # `*`-with-credentials — the one combo browsers reject — never applies. See ADR 0014.
+    # Open CORS, added LAST (outermost): the API is public, read-only, and credential-free, so any
+    # browser origin may read responses (only what an unauthenticated curl already returns). `*` is
+    # safe because there are no cookies/auth, so the rejected `*`-with-credentials combo never
+    # applies. Outermost placement puts the headers on every response, including errors.
+    # expose_headers makes the non-safelisted Retry-After / ETag / X-Request-ID readable by JS.
+    # See ADR 0014.
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
         allow_methods=["GET"],
         allow_headers=["*"],
+        expose_headers=["Retry-After", "ETag", "X-Request-ID"],
     )
 
     register_error_handlers(app)
