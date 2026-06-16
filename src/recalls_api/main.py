@@ -1,8 +1,9 @@
 """App factory + lifespan.
 
-Middleware is added inner-first; the LAST add is the OUTERMOST, so RequestIdMiddleware (added last)
-wraps everything and binds the request_id before any handler runs. Error handlers emit the uniform
-envelope; slowapi rate-limiting and Cache-Control headers are wired here.
+Middleware is added inner-first; the LAST add is the OUTERMOST. CORSMiddleware is added last so it
+wraps everything — its Access-Control-* headers land on every handled response — and
+RequestIdMiddleware, just inside it, binds the request_id before any handler runs. Error handlers
+emit the uniform envelope; slowapi rate-limiting and Cache-Control headers are wired here.
 """
 
 from __future__ import annotations
@@ -14,6 +15,7 @@ from contextlib import asynccontextmanager
 from email.utils import formatdate
 
 from fastapi import FastAPI, Request, Response
+from fastapi.middleware.cors import CORSMiddleware
 from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
@@ -76,7 +78,8 @@ def create_app() -> FastAPI:
     # Coarse cache validators (per-startup; a per-rebuild ETag awaits gold_meta.rebuilt_at, R6).
     startup_id = os.getenv("GIT_SHA") or uuid.uuid4().hex[:12]
 
-    # Inner-first; RequestIdMiddleware added LAST so it is OUTERMOST (binds request_id first).
+    # Inner-first. CORS is added LAST below (outermost); RequestIdMiddleware sits just inside it and
+    # binds request_id before any handler runs.
     app.add_middleware(
         CacheControlMiddleware,
         max_age=settings.cache_max_age_seconds,
@@ -85,6 +88,20 @@ def create_app() -> FastAPI:
     )
     app.add_middleware(SlowAPIMiddleware)
     app.add_middleware(RequestIdMiddleware)
+
+    # Open CORS, added LAST (outermost): the API is public, read-only, and credential-free, so any
+    # browser origin may read responses (only what an unauthenticated curl already returns). `*` is
+    # safe because there are no cookies/auth, so the rejected `*`-with-credentials combo never
+    # applies. Outermost placement puts the headers on every response, including errors.
+    # expose_headers makes the non-safelisted Retry-After / ETag / X-Request-ID readable by JS.
+    # See ADR 0014.
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_methods=["GET"],
+        allow_headers=["*"],
+        expose_headers=["Retry-After", "ETag", "X-Request-ID"],
+    )
 
     register_error_handlers(app)
     app.add_exception_handler(RateLimitExceeded, _on_rate_limited)  # type: ignore[arg-type]

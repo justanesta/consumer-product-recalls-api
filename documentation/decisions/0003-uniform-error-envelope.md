@@ -2,7 +2,7 @@ Purpose: Record the decision to use a single error envelope shape, map cold-DB e
 
 # 0003 - Uniform error envelope: {error:{type,detail,request_id}}, cold-DB -> 503, opaque 500
 
-**Status:** Accepted (2026-06-15) / **Date:** 2026-06-15
+**Status:** Accepted (2026-06-15); amended 2026-06-15 (the dead `RateLimited` subtype removed — see Decision §2) / **Date:** 2026-06-15
 
 ## Context
 
@@ -28,7 +28,7 @@ A public, unauthenticated API over a Neon-backed gold mart has three additional 
    ```
    Implemented as `ErrorEnvelope { error: ErrorDetail }` at `errors.py:65–72`. The `request_id` is read from the per-request `ContextVar` bound by `RequestIdMiddleware` so callers can correlate errors with operator logs.
 
-2. **`ApiError` hierarchy.** Five concrete subtypes carry `status_code` and `error_type` as class attributes: `ResourceNotFound` (404 / `not_found`), `InvalidParameter` (422 / `invalid_parameter`), `BadCursor` (400 / `bad_cursor`), `UpstreamUnavailable` (503 / `upstream_unavailable`), `RateLimited` (429 / `rate_limited`). A single `_api_error_handler` covers all subtypes via FastAPI's MRO-based dispatch (`errors.py:146`). `UpstreamUnavailable` and `RateLimited` emit `Retry-After: 5`.
+2. **`ApiError` hierarchy.** Four concrete subtypes carry `status_code` and `error_type` as class attributes: `ResourceNotFound` (404 / `not_found`), `InvalidParameter` (422 / `invalid_parameter`), `BadCursor` (400 / `bad_cursor`), `UpstreamUnavailable` (503 / `upstream_unavailable`). A single `_api_error_handler` covers all subtypes via FastAPI's MRO-based dispatch, and `UpstreamUnavailable` emits `Retry-After: 5`. *(Amended 2026-06-15: a fifth subtype `RateLimited` (429) was removed as dead code — it was never raised; the sole 429 path is `slowapi`'s `RateLimitExceeded` → `rate_limited_response()` with `Retry-After: 60`, see Consequences.)*
 
 3. **Dedicated DB error handler.** `_db_error_handler` (`errors.py:107`) is registered for `OperationalError`, `DBAPIError`, `SqlTimeoutError`, and `OSError`. It returns 503 + `Retry-After: 5` with the fixed message `"database temporarily unavailable"` and logs the raw exception via structlog. asyncpg's bare `OSError` path is explicitly covered because SQLAlchemy does not always wrap it.
 
@@ -45,4 +45,4 @@ A public, unauthenticated API over a Neon-backed gold mart has three additional 
 - **Good.** The opaque catch-all eliminates a class of accidental credential leakage unconditionally.
 - **Good.** `LIST_ERRORS` / `ITEM_ERRORS` differ by one slot (400 vs 404), keeping the pattern tidy: list endpoints never 404 (they return `items: []`); single-resource endpoints never 400 (no cursor).
 - **Trade-off.** The catch-all 500 suppresses internal detail, which can slow down diagnosing novel failures — the full traceback is in logs only.
-- **Trade-off.** `slowapi`'s `RateLimitExceeded` is wired separately via `_on_rate_limited` → `rate_limited_response()` (`main.py:90`), which emits `Retry-After: 60` (not 5). The two retry hints are intentionally different; this asymmetry must be documented in the API reference.
+- **Trade-off.** The only 429 comes from `slowapi`'s `RateLimitExceeded`, wired separately via `_on_rate_limited` → `rate_limited_response()` in `main.py`, which emits `Retry-After: 60`; the cold-DB 503 emits `Retry-After: 5`. The two retry hints are intentionally different and are documented in the API reference.
