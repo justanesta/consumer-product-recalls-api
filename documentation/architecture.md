@@ -68,33 +68,33 @@ sequenceDiagram
 ```mermaid
 flowchart LR
     subgraph GitHub
-        PR[Pull Request / push to main]
-        CI[CI workflow<br/>ruff · pyright · pytest 85% · openapi-drift · gitleaks]
-        CD[Deploy workflow<br/>flyctl deploy --remote-only]
+        PR["Pull Request / push to main"]
+        CI["CI workflow<br/>ruff · pyright · pytest 85% · openapi-drift · gitleaks"]
+        CD["Deploy workflow<br/>flyctl deploy --remote-only"]
     end
 
     subgraph Fly_io["Fly.io (iad — us-east)"]
-        M[Fly machine<br/>uvicorn · scale-to-zero<br/>min_machines_running=0]
+        M["Fly machine<br/>uvicorn · scale-to-zero<br/>min_machines_running=0"]
     end
 
     subgraph Neon["Neon PostgreSQL (AWS us-east-1)"]
-        RO[recalls_readonly role<br/>SELECT-only on gold schema]
-        G1[mart_recall_summary]
-        G2[mart_product_search]
-        G3[mart_firm_profile]
-        GM[gold_meta]
+        RO["recalls_readonly role<br/>SELECT-only on gold schema"]
+        G1["mart_recall_summary"]
+        G2["mart_product_search"]
+        G3["mart_firm_profile"]
+        GM["gold_meta"]
     end
 
     subgraph Pipeline["Upstream pipeline repo"]
-        DBT[dbt gold build<br/>~03:00 UTC nightly]
+        DBT["dbt gold build<br/>~03:00 UTC nightly"]
     end
 
     PR --> CI
-    CI -->|green on main| CD
+    CI -->|"green on main"| CD
     CD --> M
-    M -->|asyncpg pool<br/>TLS required| RO
+    M -->|"asyncpg pool<br/>TLS required"| RO
     RO --> G1 & G2 & G3 & GM
-    DBT -->|writes| G1 & G2 & G3 & GM
+    DBT -->|"writes"| G1 & G2 & G3 & GM
 ```
 
 The API sits entirely to the right of the dashed line between the pipeline and Neon: it reads gold, never writes it, and never joins across raw or silver layers.

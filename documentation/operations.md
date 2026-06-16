@@ -8,15 +8,15 @@ Every push to `main` that passes CI automatically deploys to Fly.io. No manual p
 
 ```mermaid
 flowchart LR
-    A[push / PR to main] --> B[CI workflow\nci.yml]
-    B -->|all steps green| C[Deploy workflow\ndeploy.yml\nworkflow_run gated]
-    B -->|any step fails| X([no deploy])
-    C --> D[checkout exact\nhead_sha]
-    D --> E[setup-flyctl@1.5]
-    E --> F[flyctl deploy\n--remote-only\n--build-arg GIT_SHA]
-    F --> G[readiness smoke\ncurl /health/db\n5× retries, 10 s apart]
-    G -->|200| H([deploy complete])
-    G -->|all fail| Y([workflow fails])
+    A["push / PR to main"] --> B["CI workflow<br/>ci.yml"]
+    B -->|"all steps green"| C["Deploy workflow<br/>deploy.yml<br/>workflow_run gated"]
+    B -->|"any step fails"| X(["no deploy"])
+    C --> D["checkout exact<br/>head_sha"]
+    D --> E["setup-flyctl@1.5"]
+    E --> F["flyctl deploy<br/>--remote-only<br/>--build-arg GIT_SHA"]
+    F --> G["readiness smoke<br/>curl /health/db<br/>5x retries, 10 s apart"]
+    G -->|"200"| H(["deploy complete"])
+    G -->|"all fail"| Y(["workflow fails"])
 ```
 
 ### What each stage does
@@ -107,7 +107,7 @@ At current traffic (scale-to-zero):
 | Fly machine (idle, rootfs storage only) | ~$0.03/month |
 | Fly machine (shared-cpu-1x, always-on) | ~$2/month |
 | Fly egress | ~$0.02/GB after 160 GB/month free |
-| Neon (free tier) | $0 |
+| Neon (paid launch tier) | $25/month, mainly for compute usage |
 
 To trade idle cost for latency, see the `min_machines_running` row in the [fly.toml Configuration](#flytoml-configuration) table above.
 
