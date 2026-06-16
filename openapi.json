@@ -404,7 +404,7 @@
             }
           },
           "429": {
-            "description": "RateLimited.",
+            "description": "Rate limit exceeded.",
             "content": {
               "application/json": {
                 "schema": {
@@ -773,7 +773,7 @@
             }
           },
           "429": {
-            "description": "RateLimited.",
+            "description": "Rate limit exceeded.",
             "content": {
               "application/json": {
                 "schema": {
@@ -861,7 +861,7 @@
             }
           },
           "429": {
-            "description": "RateLimited.",
+            "description": "Rate limit exceeded.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1064,7 +1064,7 @@
             }
           },
           "429": {
-            "description": "RateLimited.",
+            "description": "Rate limit exceeded.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1142,7 +1142,7 @@
             }
           },
           "429": {
-            "description": "RateLimited.",
+            "description": "Rate limit exceeded.",
             "content": {
               "application/json": {
                 "schema": {

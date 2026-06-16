@@ -54,11 +54,6 @@ class UpstreamUnavailable(ApiError):
     error_type = "upstream_unavailable"
 
 
-class RateLimited(ApiError):
-    status_code = status.HTTP_429_TOO_MANY_REQUESTS
-    error_type = "rate_limited"
-
-
 # --- The wire envelope (Pydantic models for OpenAPI) + reusable `responses=` maps ---
 
 
@@ -78,7 +73,7 @@ ERR_400: dict[int | str, dict[str, Any]] = {400: {**_ERR, "description": "BadCur
 ERR_404: dict[int | str, dict[str, Any]] = {404: {**_ERR, "description": "ResourceNotFound."}}
 ERR_422: dict[int | str, dict[str, Any]] = {422: {**_ERR, "description": "InvalidParameter."}}
 ERR_503: dict[int | str, dict[str, Any]] = {503: {**_ERR, "description": "UpstreamUnavailable."}}
-ERR_429: dict[int | str, dict[str, Any]] = {429: {**_ERR, "description": "RateLimited."}}
+ERR_429: dict[int | str, dict[str, Any]] = {429: {**_ERR, "description": "Rate limit exceeded."}}
 
 # Per-endpoint maps for the route `responses=` kwarg (so error shapes appear in the OpenAPI spec).
 LIST_ERRORS: dict[int | str, dict[str, Any]] = {**ERR_400, **ERR_422, **ERR_503, **ERR_429}
@@ -99,8 +94,8 @@ def _envelope(
 
 
 async def _api_error_handler(_: Request, exc: ApiError) -> JSONResponse:
-    # 503 (cold DB) and 429 (rate limit) are retry-friendly.
-    headers = {"Retry-After": "5"} if isinstance(exc, UpstreamUnavailable | RateLimited) else None
+    # 503 (cold DB) is retry-friendly. (The 429 path is slowapi's, not an ApiError — see main.py.)
+    headers = {"Retry-After": "5"} if isinstance(exc, UpstreamUnavailable) else None
     return _envelope(exc.error_type, exc.detail, exc.status_code, headers)
 
 

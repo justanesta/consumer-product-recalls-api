@@ -12,7 +12,6 @@ from recalls_api.errors import (
     ApiError,
     BadCursor,
     InvalidParameter,
-    RateLimited,
     ResourceNotFound,
     UpstreamUnavailable,
     _api_error_handler,
@@ -45,7 +44,6 @@ def test_envelope_shape() -> None:
         (InvalidParameter("x"), 422, "invalid_parameter"),
         (BadCursor("x"), 400, "bad_cursor"),
         (UpstreamUnavailable("x"), 503, "upstream_unavailable"),
-        (RateLimited("x"), 429, "rate_limited"),
     ],
 )
 def test_api_error_taxonomy(exc: ApiError, code: int, etype: str) -> None:
