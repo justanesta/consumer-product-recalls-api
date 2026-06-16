@@ -8,14 +8,15 @@ This is a read-only FastAPI service that exposes five consumer-product-recall da
 
 ## Request Lifecycle
 
-Middleware is registered inner-first in `main.py` so the **last-added wrapper is outermost** on ingress.
+Middleware is registered inner-first in `main.py` so the **last-added wrapper is outermost** on ingress — `CORSMiddleware` is added last, so it wraps the whole stack (see [decisions/0014-open-cors-public-read-only-api.md](decisions/0014-open-cors-public-read-only-api.md)).
 
 ```mermaid
 sequenceDiagram
     participant C as Client
     participant F as Fly edge (TLS term)
     participant U as uvicorn<br/>(--proxy-headers)
-    participant RI as RequestIdMiddleware<br/>(outermost)
+    participant CO as CORSMiddleware<br/>(outermost)
+    participant RI as RequestIdMiddleware
     participant SL as SlowAPIMiddleware<br/>(rate limit)
     participant CC as CacheControlMiddleware<br/>(innermost)
     participant R as Router handler
@@ -27,7 +28,8 @@ sequenceDiagram
 
     C->>F: HTTPS request
     F->>U: HTTP + X-Forwarded-For
-    U->>RI: reads/mints X-Request-ID,<br/>binds to structlog contextvars
+    U->>CO: request (preflight OPTIONS short-circuits here)
+    CO->>RI: reads/mints X-Request-ID,<br/>binds to structlog contextvars
     RI->>SL: per-IP rate limit check (60/min default)
     SL->>CC: pass through
     CC->>R: dispatch to router
@@ -40,7 +42,8 @@ sequenceDiagram
     P->>PE: Page[T]{items, next_cursor, limit, total?}
     PE-->>CC: 200 response
     CC-->>RI: sets Cache-Control / ETag / Last-Modified on 200 GETs
-    RI-->>C: echoes X-Request-ID, logs access line + latency
+    RI-->>CO: echoes X-Request-ID, logs access line + latency
+    CO-->>C: adds Access-Control-Allow-Origin
 ```
 
 ---
@@ -49,7 +52,7 @@ sequenceDiagram
 
 | Module | Path | Responsibility |
 |---|---|---|
-| `main` | `src/recalls_api/main.py` | `create_app()` factory: registers middleware (inner-first), error handlers, routers, lifespan (pool open/close, fail-loud settings validation at boot) |
+| `main` | `src/recalls_api/main.py` | `create_app()` factory: registers middleware (inner-first; `CORSMiddleware` outermost), error handlers, routers, lifespan (pool open/close, fail-loud settings validation at boot) |
 | `settings` | `src/recalls_api/settings.py` | `pydantic-settings` `Settings`; `get_settings()` is `lru_cache(maxsize=1)` — constructed once at boot; missing `NEON_DATABASE_URL_RO` raises `ValidationError` immediately |
 | `routers` | `src/recalls_api/routers/` | Four FastAPI routers (`health`, `recalls`, `products`, `firms`); own no SQL; call query builders + pagination helpers; declare `responses=` error maps |
 | `deps` | `src/recalls_api/deps.py` | `RecallFilters` and `PaginationParams` as FastAPI `Depends` dataclasses; `get_conn` dependency that yields one `AsyncConnection` per request from the pool |
