@@ -1,4 +1,4 @@
-# recalls-api
+# consumer-product-recalls-api
 
 An **open, read-only** FastAPI service over the consumer product recalls **gold marts** (CPSC, FDA,
 USDA, NHTSA, USCG) produced by the separate pipeline repo
@@ -12,14 +12,13 @@ gold, this reads it.
 |---|---|---|
 | `GET` | `/recalls` | List + filter recalls (keyset pagination) |
 | `GET` | `/recalls/{source}/{recall_id}` | One recall (full detail) |
+| `GET` | `/recalls/search` | Recall-grain keyword full-text search (ts_rank_cd), same filters as /recalls |
 | `GET` | `/products/search` | "Is my product recalled?" — keyword FTS + exact `hin`/`model`, recall-level UPC |
 | `GET` | `/firms/{id}` | One canonical firm profile |
 | `GET` | `/health`, `/health/db` | Liveness / readiness |
 | `GET` | `/openapi.json`, `/docs`, `/redoc` | Auto-generated spec + UIs |
 
-Honest caveats (surfaced in the OpenAPI descriptions): `is_active` is tri-state (CPSC/NHTSA carry no
-status → null); `classification` is source-native (not comparable across sources); UPC search matches
-**recall-level** UPC arrays, not per-product UPC; **no fuzzy/typo search**.
+For data-model root causes see [`documentation/data_contract.md`](documentation/data_contract.md); for per-endpoint caveats see [`documentation/api-reference.md`](documentation/api-reference.md).
 
 ## Stack
 
@@ -54,9 +53,19 @@ uv run pytest                       # add --cov-fail-under=85 in CI
 
 ## Where the design lives
 
-- `project_scope/build/00-README-build-guide.md` — start here: provenance, conventions, prerequisites.
+**Operational docs** (`documentation/`):
+- [`architecture.md`](documentation/architecture.md) — request lifecycle, module responsibilities, diagrams
+- [`development.md`](documentation/development.md) — local setup, quality gate, branching, how-to-add-an-endpoint
+- [`operations.md`](documentation/operations.md) — CI→deploy pipeline, Fly.io config, runbook
+- [`data_contract.md`](documentation/data_contract.md) — gold mart read contract, surrogate keys, data caveats
+- [`api-reference.md`](documentation/api-reference.md) — exhaustive per-endpoint reference
+- [`frontend-api-docs-handoff.md`](documentation/frontend-api-docs-handoff.md) — how to publish docs on the website
+- [`decisions/`](documentation/decisions/) — ADR registry (local + upstream pipeline ADRs)
+
+**Build specs** (`project_scope/build/`):
+- `00-README-build-guide.md` — start here: provenance, conventions, prerequisites.
 - `01` ground truth (gold-mart schema) · `02` plan reconciliation · `03` API contract + models ·
   `04` implementation blueprint · `05` testing/CI · `06` deploy/ops · `07` gold-layer asks ·
   `08` commit plan.
 
-Status: **scaffolding** (pre-v1). Local-only on `main`; branch-per-feature once it's on GitHub.
+**Status:** deployed at `https://consumer-product-recalls-api.fly.dev`. Branch-per-feature with CI-gated auto-deploy to Fly.io on every green merge to `main`.
