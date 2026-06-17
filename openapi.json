@@ -3,7 +3,7 @@
   "info": {
     "title": "Consumer Product Recalls API",
     "description": "Open, read-only API over the consumer product recalls gold marts (CPSC, FDA, USDA, NHTSA, USCG). Honest caveats: `is_active` is tri-state (CPSC/NHTSA carry no status -> null); `classification` is source-native and not comparable across sources; UPC search matches recall-level UPC arrays, not per-product UPC; there is no fuzzy/typo search.",
-    "version": "0.1.0"
+    "version": "0.1.1"
   },
   "paths": {
     "/health": {
