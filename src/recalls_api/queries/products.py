@@ -67,8 +67,12 @@ _HIT_COLS = (
 _search_vector = sa.literal_column("search_vector")  # tsvector; GIN-indexed
 
 
-def _source_cond(source: Source | None) -> ColumnElement[bool] | None:
-    return product_search.c.source == sa.bindparam("source", source.value) if source else None
+def _source_cond(sources: list[Source] | None) -> ColumnElement[bool] | None:
+    if not sources:
+        return None
+    return product_search.c.source.in_(
+        sa.bindparam("source", [s.value for s in sources], expanding=True)
+    )
 
 
 def _all(*conds: ColumnElement[bool] | None) -> ColumnElement[bool]:
@@ -93,11 +97,11 @@ def _order_by_published(stmt: Select, cursor: Cursor | None, limit: int) -> Sele
     ).limit(limit + 1)
 
 
-def fts_stmt(q: str, cursor: Cursor | None, limit: int, source: Source | None) -> Select:
+def fts_stmt(q: str, cursor: Cursor | None, limit: int, sources: list[Source] | None) -> Select:
     tq = _tsquery(q)
     rank = sa.func.ts_rank_cd(_search_vector, tq).label("rank")
     stmt = sa.select(*_HIT_COLS, rank).where(
-        _all(_search_vector.op("@@")(tq), _source_cond(source))
+        _all(_search_vector.op("@@")(tq), _source_cond(sources))
     )
     if cursor is not None:
         stmt = stmt.where(rank_keyset_where(cursor, rank, product_search.c.recall_product_id))
@@ -105,45 +109,53 @@ def fts_stmt(q: str, cursor: Cursor | None, limit: int, source: Source | None) -
     return stmt.order_by(rank.desc(), product_search.c.recall_product_id.asc()).limit(limit + 1)
 
 
-def fts_count_stmt(q: str, source: Source | None) -> Select:
-    where = _all(_search_vector.op("@@")(_tsquery(q)), _source_cond(source))
+def fts_count_stmt(q: str, sources: list[Source] | None) -> Select:
+    where = _all(_search_vector.op("@@")(_tsquery(q)), _source_cond(sources))
     return sa.select(sa.func.count()).select_from(product_search).where(where)
 
 
 def _identifier_where(
-    hin: str | None, model: str | None, source: Source | None
+    hin: str | None, model: str | None, sources: list[Source] | None
 ) -> ColumnElement[bool]:
     hin_c = product_search.c.hin == sa.bindparam("hin", hin) if hin is not None else None
     model_c = product_search.c.model == sa.bindparam("model", model) if model is not None else None
-    return _all(hin_c, model_c, _source_cond(source))
+    return _all(hin_c, model_c, _source_cond(sources))
 
 
 def identifier_stmt(
-    hin: str | None, model: str | None, cursor: Cursor | None, limit: int, source: Source | None
+    hin: str | None,
+    model: str | None,
+    cursor: Cursor | None,
+    limit: int,
+    sources: list[Source] | None,
 ) -> Select:
-    stmt = sa.select(*_HIT_COLS).where(_identifier_where(hin, model, source))
+    stmt = sa.select(*_HIT_COLS).where(_identifier_where(hin, model, sources))
     return _order_by_published(stmt, cursor, limit)
 
 
-def identifier_count_stmt(hin: str | None, model: str | None, source: Source | None) -> Select:
+def identifier_count_stmt(
+    hin: str | None, model: str | None, sources: list[Source] | None
+) -> Select:
     return (
         sa.select(sa.func.count())
         .select_from(product_search)
-        .where(_identifier_where(hin, model, source))
+        .where(_identifier_where(hin, model, sources))
     )
 
 
-def _upc_where(upc: str, source: Source | None) -> ColumnElement[bool]:
+def _upc_where(upc: str, sources: list[Source] | None) -> ColumnElement[bool]:
+    # Gold stores UPCs as an array of objects [{"upc": "X"}] (not bare strings), so containment must
+    # match that shape: [{"upc":"X"}] @> [{"upc":"X"}]. Stays GIN-served on recall_product_upcs.
     contains = sa.cast(product_search.c.recall_product_upcs, JSONB).op("@>")(
-        sa.bindparam("upc_arr", [upc], type_=JSONB)
+        sa.bindparam("upc_arr", [{"upc": upc}], type_=JSONB)
     )
-    return _all(contains, _source_cond(source))
+    return _all(contains, _source_cond(sources))
 
 
-def upc_stmt(upc: str, cursor: Cursor | None, limit: int, source: Source | None) -> Select:
-    stmt = sa.select(*_HIT_COLS).where(_upc_where(upc, source))
+def upc_stmt(upc: str, cursor: Cursor | None, limit: int, sources: list[Source] | None) -> Select:
+    stmt = sa.select(*_HIT_COLS).where(_upc_where(upc, sources))
     return _order_by_published(stmt, cursor, limit)
 
 
-def upc_count_stmt(upc: str, source: Source | None) -> Select:
-    return sa.select(sa.func.count()).select_from(product_search).where(_upc_where(upc, source))
+def upc_count_stmt(upc: str, sources: list[Source] | None) -> Select:
+    return sa.select(sa.func.count()).select_from(product_search).where(_upc_where(upc, sources))

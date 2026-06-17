@@ -96,10 +96,16 @@ def recalls_predicates(filters: RecallFilters) -> list[ColumnElement[bool]]:
     """Conditional predicates — appended only when a filter is set. All values bound."""
     c = recall_summary.c
     conds: list[ColumnElement[bool]] = []
-    if filters.source is not None:
-        conds.append(c.source == sa.bindparam("source", filters.source.value))
-    if filters.classification is not None:
-        conds.append(c.classification == sa.bindparam("classification", filters.classification))
+    if filters.source:  # any-of (OR) within the field; expanding IN
+        conds.append(
+            c.source.in_(sa.bindparam("source", [s.value for s in filters.source], expanding=True))
+        )
+    if filters.classification:
+        conds.append(
+            c.classification.in_(
+                sa.bindparam("classification", list(filters.classification), expanding=True)
+            )
+        )
     if filters.is_active is not None:  # == excludes NULL rows (CPSC/NHTSA) by design
         conds.append(c.is_active == sa.bindparam("is_active", filters.is_active))
     if filters.published_after is not None:  # inclusive from the start of that day (UTC)
@@ -114,12 +120,22 @@ def recalls_predicates(filters: RecallFilters) -> list[ColumnElement[bool]]:
         )
     if filters.firm is not None:  # substring; unindexed (02) — accept seq cost
         conds.append(c.primary_firm_name.ilike(sa.bindparam("firm", f"%{filters.firm}%")))
-    if filters.distribution_scope is not None:  # NOT NULL 4-value enum
+    if filters.distribution_scope:  # NOT NULL 4-value enum; any-of (OR)
         conds.append(
-            c.distribution_scope == sa.bindparam("dist_scope", filters.distribution_scope.value)
+            c.distribution_scope.in_(
+                sa.bindparam(
+                    "dist_scope",
+                    [s.value for s in filters.distribution_scope],
+                    expanding=True,
+                )
+            )
         )
-    if filters.lifecycle_status is not None:  # NULL for CPSC/NHTSA -> excluded
-        conds.append(c.lifecycle_status == sa.bindparam("lifecycle", filters.lifecycle_status))
+    if filters.lifecycle_status:  # NULL for CPSC/NHTSA -> excluded; any-of (OR)
+        conds.append(
+            c.lifecycle_status.in_(
+                sa.bindparam("lifecycle", list(filters.lifecycle_status), expanding=True)
+            )
+        )
     if filters.announced_after is not None:  # announced_at NULLABLE -> NULL rows excluded
         conds.append(c.announced_at >= sa.bindparam("ann_after", filters.announced_after))
     if filters.announced_before is not None:  # whole-day inclusive (cf. published_before)
@@ -131,19 +147,23 @@ def recalls_predicates(filters: RecallFilters) -> list[ColumnElement[bool]]:
         conds.append(
             c.source_recall_id == sa.bindparam("source_recall_id", filters.source_recall_id)
         )
-    if filters.distribution_state is not None:  # array containment (GIN @>); FDA/USDA only
+    if filters.distribution_state:  # array overlap (GIN &&); any-of (OR); FDA/USDA only
         conds.append(
-            c.distribution_state_codes.op("@>")(
+            c.distribution_state_codes.op("&&")(
                 sa.bindparam(
-                    "dist_state", [filters.distribution_state.upper()], type_=sa.ARRAY(sa.Text)
+                    "dist_state",
+                    [s.upper() for s in filters.distribution_state],
+                    type_=sa.ARRAY(sa.Text),
                 )
             )
         )
-    if filters.distribution_country is not None:  # foreign-only; 'US' never present (by design)
+    if filters.distribution_country:  # foreign-only ('US' never present); any-of (OR)
         conds.append(
-            c.distribution_country_codes.op("@>")(
+            c.distribution_country_codes.op("&&")(
                 sa.bindparam(
-                    "dist_country", [filters.distribution_country.upper()], type_=sa.ARRAY(sa.Text)
+                    "dist_country",
+                    [s.upper() for s in filters.distribution_country],
+                    type_=sa.ARRAY(sa.Text),
                 )
             )
         )

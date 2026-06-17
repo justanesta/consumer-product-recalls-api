@@ -4,7 +4,7 @@
 --
 -- recall_event_id = md5(source || '|' || source_recall_id) so the detail endpoint's computed key
 -- (md5("SOURCE|recall_id")) matches a seeded row. Scenarios covered (mart_recall_summary):
---   FDA F-1001  active (Class I), 2 product names, recall-level UPC
+--   FDA F-1001  active (Class I), 2 product names, recall-level UPC (gold object shape [{"upc":...}])
 --   FDA F-1006  inactive (Class III), same firm as F-1001 (firm substring "acme" -> 2 hits)
 --   CPSC 24-003 is_active NULL (tri-state), classification NULL, product_names/hins NULL (-> [])
 --   USDA U-2002 inactive (Class II), MULTI-FIRM rollup, state codes array, retracted
@@ -80,7 +80,7 @@ insert into mart_recall_summary (
 (md5('FDA|F-1006'), 'FDA', 'F-1006', 'Acme Cereal Undeclared Milk', 'Undeclared allergen (milk)',
  'https://example.test/fda/F-1006', '2026-05-12 00:00:00+00', '2026-05-12 09:00:00+00',
  'Class III', null, 'Completed', false, null, 'Nationwide',
- 'Nationwide', null, null, null, '["099999999999"]',
+ 'Nationwide', null, null, null, '[{"upc": "099999999999"}]',
  'Return to store for refund', 'Allergic reaction', 'Acme Foods Inc', 1,
  '[{"firm_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "name": "Acme Foods Inc", "role": "establishment", "match_confidence": "fei_exact"}]',
  1, '["Acme Cereal 12oz"]', null, null, '2026-05-12 10:00:00+00', '2026-05-13 10:00:00+00', 1, null, null, 0, false),
@@ -89,7 +89,7 @@ insert into mart_recall_summary (
 (md5('FDA|F-1001'), 'FDA', 'F-1001', 'Acme Peanut Butter Salmonella', 'Possible Salmonella contamination',
  'https://example.test/fda/F-1001', '2026-05-10 00:00:00+00', '2026-05-10 12:00:00+00',
  'Class I', null, 'Ongoing', true, null, 'Nationwide',
- 'Nationwide', null, null, null, '["012345678905"]',
+ 'Nationwide', null, null, null, '[{"upc": "012345678905"}]',
  'Do not eat; discard', 'Salmonella infection', 'Acme Foods Inc', 1,
  '[{"firm_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "name": "Acme Foods Inc", "role": "establishment", "match_confidence": "fei_exact"}]',
  2, '["Acme Peanut Butter 16oz", "Acme Peanut Butter 32oz"]', null, null,
@@ -146,7 +146,8 @@ update mart_recall_summary set search_vector =
 -- ---------------------------------------------------------------------------------------------------
 -- mart_product_search (C6). One row per recalled product; recall_event_id links to a recall above.
 -- search_vector is populated by the UPDATE below (mirrors the dbt-stored tsvector). recall_product_upcs
--- carries the recall-level UPCs (the per-product `upc` column is NULL, as in production).
+-- carries the recall-level UPCs as an array of objects [{"upc":"X"}] (the real gold shape; the
+-- per-product `upc` column is NULL, as in production).
 -- ---------------------------------------------------------------------------------------------------
 
 drop table if exists mart_product_search;
@@ -188,7 +189,7 @@ insert into mart_product_search (
 ) values
 ('rp-001', md5('FDA|F-1001'), 'FDA', 'F-1001', 'Acme Peanut Butter 16oz', 'Creamy peanut butter spread',
  null, 'Food', null, null, null, 'Acme Peanut Butter Salmonella', 'Class I', null,
- '2026-05-10 12:00:00+00', 'https://example.test/fda/F-1001', true, 'Acme Foods Inc', '["012345678905"]'),
+ '2026-05-10 12:00:00+00', 'https://example.test/fda/F-1001', true, 'Acme Foods Inc', '[{"upc": "012345678905"}]'),
 ('rp-002', md5('NHTSA|24V-004'), 'NHTSA', '24V-004', 'Honda Civic', 'Compact sedan',
  'Civic', 'Vehicle', '2019', null, null, 'Honda Fuel Pump Recall', null, null,
  '2026-03-20 07:00:00+00', 'https://example.test/nhtsa/24V-004', null, 'Honda Motor Co', null),
@@ -200,7 +201,7 @@ insert into mart_product_search (
  '2026-02-10 06:00:00+00', 'https://example.test/uscg/USCG-005', true, 'Boaty Mfg', null),
 ('rp-005', md5('FDA|F-1006'), 'FDA', 'F-1006', 'Acme Cereal 12oz', 'Breakfast cereal',
  null, 'Food', null, null, null, 'Acme Cereal Undeclared Milk', 'Class III', null,
- '2026-05-12 09:00:00+00', 'https://example.test/fda/F-1006', false, 'Acme Foods Inc', '["099999999999"]');
+ '2026-05-12 09:00:00+00', 'https://example.test/fda/F-1006', false, 'Acme Foods Inc', '[{"upc": "099999999999"}]');
 
 update mart_product_search set search_vector = to_tsvector('english',
     coalesce(product_name, '') || ' ' || coalesce(product_description, '') || ' ' ||

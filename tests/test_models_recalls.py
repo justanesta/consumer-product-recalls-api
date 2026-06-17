@@ -54,6 +54,19 @@ def test_recall_detail_parses_nested_firms() -> None:
     assert len(d.firms) == 1 and d.firms[0].name == "Acme"
 
 
+def test_recall_detail_flattens_object_shaped_upcs() -> None:
+    # Gold stores UPCs as [{"upc": "X"}] objects; the model must unwrap to bare strings (not 500).
+    row = _base_row() | {"product_upcs": [{"upc": "082294319754"}, {"upc": "3086120600051"}]}
+    d = RecallDetail.model_validate(row)
+    assert d.product_upcs == ["082294319754", "3086120600051"]
+
+
+def test_recall_detail_upcs_tolerates_plain_string_shape() -> None:
+    # Forward-compatible with the pending gold flatten (bare strings pass through unchanged).
+    d = RecallDetail.model_validate(_base_row() | {"product_upcs": ["012345678905"]})
+    assert d.product_upcs == ["012345678905"]
+
+
 def test_recall_detail_scalar_states_vs_codes_array() -> None:
     row = _base_row() | {"distribution_states": "CA, OR", "distribution_state_codes": ["CA", "OR"]}
     d = RecallDetail.model_validate(row)

@@ -5,9 +5,24 @@ and the health models. Resource models (recalls/products/firms) live in sibling 
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
+
+
+def flatten_upcs(v: Any) -> Any:
+    """Normalize a gold UPC array to plain strings.
+
+    Gold stores recall-level UPCs as an array of objects — ``[{"upc": "012345678905"}]`` (lowercase
+    key) — not bare strings. This unwraps each ``{"upc": x}`` element to ``x`` so the response field
+    stays ``list[str]``. Tolerant of the future flattened shape (bare strings pass through) and of a
+    NULL array (-> ``[]``), so it is safe across the pending cross-repo gold change.
+    """
+    if v is None:
+        return []
+    if isinstance(v, list):
+        return [e["upc"] if isinstance(e, dict) and "upc" in e else e for e in v]
+    return v
 
 
 class Source(StrEnum):

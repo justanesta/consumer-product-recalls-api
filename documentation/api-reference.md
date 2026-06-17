@@ -107,19 +107,24 @@ GET /recalls
 
 ### Parameters
 
-All parameters are optional. Filters AND together when multiple are supplied.
+All parameters are optional. Different filters AND together. The six categorical filters marked
+**multi** below accept more than one value — repeat the param (`?source=CPSC&source=FDA`) or
+comma-separate it (`?source=CPSC,FDA`); the two forms are equivalent. Multiple values for the **same**
+field are OR-ed (any-of); different fields still AND. A single value behaves exactly as before. (Only
+fields whose legal values never contain a comma are multi-value — `firm` and the date ranges stay
+single-value.)
 
 #### Recall filters
 
 | Name | Type | Default | Constraints | Notes |
 |---|---|---|---|---|
-| `source` | enum | — | `CPSC`, `FDA`, `USDA`, `NHTSA`, `USCG` (uppercase) | Filter to one issuing agency. Unknown value → 422. |
-| `classification` | string | — | `max_length=64` | Exact match on the source-native classification string. Values differ by agency; see [data_contract.md](data_contract.md) for the root cause. |
+| `source` | enum (**multi**) | — | `CPSC`, `FDA`, `USDA`, `NHTSA`, `USCG` (uppercase) | Filter to one or more issuing agencies (any-of). Unknown value → 422. |
+| `classification` | string (**multi**) | — | `max_length=64` per value | Exact match on the source-native classification string(s); any-of. Values differ by agency; see [data_contract.md](data_contract.md) for the root cause. |
 | `is_active` | boolean | — | — | Tri-state. CPSC and NHTSA carry `null`; a `true` or `false` filter silently excludes all their records. See [data_contract.md](data_contract.md). |
-| `lifecycle_status` | string | — | `max_length=64` | Exact match; source-native. CPSC/NHTSA carry `null`, so filtering on this value excludes their rows. |
-| `distribution_scope` | enum | — | `Nationwide`, `Regional`, `Unspecified`, `International` | Validated; 422 on any other value. |
-| `distribution_state` | string | — | exactly 2 chars, USPS code | Recalls distributed to this US state. GIN-backed. FDA/USDA only; CPSC/NHTSA/USCG have no distribution area data. |
-| `distribution_country` | string | — | exactly 2 chars, ISO alpha-2 | **Foreign distribution only.** `US` is excluded by design — US distribution is captured by `distribution_scope` + `distribution_state`. GIN-backed. FDA/USDA only. See [data_contract.md](data_contract.md). |
+| `lifecycle_status` | string (**multi**) | — | `max_length=64` per value | Exact match; source-native; any-of. CPSC/NHTSA carry `null`, so filtering on this value excludes their rows. |
+| `distribution_scope` | enum (**multi**) | — | `Nationwide`, `Regional`, `Unspecified`, `International` | Any-of; validated; 422 on any other value. |
+| `distribution_state` | string (**multi**) | — | exactly 2 chars each, USPS code | Recalls distributed to **any** of these US states (array overlap). GIN-backed. FDA/USDA only; CPSC/NHTSA/USCG have no distribution area data. |
+| `distribution_country` | string (**multi**) | — | exactly 2 chars each, ISO alpha-2 | Recalls distributed to **any** of these countries (array overlap). **Foreign distribution only** — `US` is excluded by design (US distribution is captured by `distribution_scope` + `distribution_state`). GIN-backed. FDA/USDA only. See [data_contract.md](data_contract.md). |
 | `source_recall_id` | string | — | `min_length=1`, `max_length=128` | Exact match on the agency-native recall id. Unique only when combined with `source`; use the detail route for a guaranteed single result. |
 | `firm` | string | — | `min_length=2`, `max_length=200` | Case-insensitive substring match on `primary_firm_name`. Unindexed — avoid on very large result sets without a leading `source` filter. |
 | `published_after` | date (`YYYY-MM-DD`) | — | — | Inclusive start of the calendar day. |
@@ -351,8 +356,8 @@ GET /products/search
 | `q` | string | — | `min_length=2`, `max_length=200` | Full-text search over product name, description, recall title, and firm name. Token/prefix only; no fuzzy. Results sorted by relevance. |
 | `hin` | string | — | `max_length=64` | Exact USCG Hull Identification Number. Sorted by `published_at DESC`. |
 | `model` | string | — | `max_length=128` | Exact product model string. Sorted by `published_at DESC`. Can be combined with `hin`. |
-| `upc` | string | — | `max_length=32` | UPC code. Matched at the **recall level** via array containment (`recall_product_upcs @> [upc]`). Per-product `upc` is empty for all rows today. Results carry `upc_is_recall_level: true`. |
-| `source` | enum | — | `CPSC`, `FDA`, `USDA`, `NHTSA`, `USCG` | Optional source filter, AND-ed with whichever selector is active. |
+| `upc` | string | — | `max_length=32` | UPC code. Matched at the **recall level** via JSONB array containment over `recall_product_upcs`. Per-product `upc` is empty for all rows today. Results carry `upc_is_recall_level: true`. UPC data is CPSC-sourced and sparse, so most codes return no match. |
+| `source` | enum (**multi**) | — | `CPSC`, `FDA`, `USDA`, `NHTSA`, `USCG` | Optional source filter, AND-ed with whichever selector is active. Accepts one or more values (repeat or comma-separate) for any-of (OR). |
 
 #### Pagination
 

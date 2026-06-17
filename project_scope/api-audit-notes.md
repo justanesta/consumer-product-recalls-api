@@ -30,6 +30,8 @@ Why are these recall filter parameters only available for **one** value and not 
 > **Not POST.** A POST-body query for facets would forfeit HTTP caching (ADR 0007 — POST is uncacheable by browsers/CDNs/proxies), linkability/bookmarking, the GET-only CORS surface (ADR 0014; POST+JSON adds an `OPTIONS` preflight per call), and safe-method retry semantics. CSV-in-GET covers even "12 states" (~35 chars, far under URL limits) and still hits the GIN. POST is reserved for genuinely large/unbounded *identifier* lists (Q2/Q3).
 >
 > **Non-breaking + keyset-safe:** a single value still behaves exactly as today; the `ORDER BY (published_at DESC, recall_event_id)` and the cursor codec are unchanged — multi-value only adds an `IN`/`&&` predicate to the WHERE. The same `RecallFilters` powers `/recalls`, `/recalls/search`, and (for `source`) `/products/search`, so all three benefit. Planner stats are fresh (audit §D), so there's no stale-stats seq-scan risk.
+>
+> **🟢 Implemented 2026-06-17 (`feature/api-audit`).** `deps.split_query_list` (comma-tolerant `BeforeValidator`) + per-element-constrained list query types; `RecallFilters` categorical fields are now `list[…]`; `recalls_predicates` emits expanding `IN` for `source`/`classification`/`lifecycle_status`/`distribution_scope` and array overlap `&&` for `distribution_state`/`distribution_country`; `/products/search` `source` is multi-value too. `openapi.json` regenerated (array params). Coverage: unit (`test_deps`, `test_queries_recalls`, `test_queries_products`) + integration (comma + repeated forms, any-of/AND composition, `&&` overlap). Full suite green (147 passed).
 
 ### classification
 Distinct values:
@@ -370,6 +372,8 @@ justanesta ~/projects/consumer-product-recalls-api feature/api-audit > curl -s "
 > **Fix (batched with the other audit fixes; this repo):** (1) `RecallDetail.product_upcs` — a `BeforeValidator` mapping `{"upc": x} → x`; (2) `ProductSearchHit.recall_product_upcs` — same; (3) `_upc_where` — containment bind `[{"upc": upc}]` (stays GIN/R3-served); (4) fix `seed_gold.sql` to the real object shape + turn the two UPC tests into genuine regression coverage. No OpenAPI change (fields stay `list[str]`); all four tolerate a future string shape.
 >
 > **Cleaner long-term (cross-repo):** flatten gold to string arrays → [`../TODO.md`](../TODO.md) → "Flatten gold UPC arrays to plain strings". Non-blocking (the API fix tolerates both shapes).
+>
+> **🟢 Implemented 2026-06-17 (`feature/api-audit`).** Shared `models/common.flatten_upcs` (`{"upc": x} → x`, None → `[]`, bare strings pass through) wired into `RecallDetail.product_upcs` and `ProductSearchHit.recall_product_upcs`; `_upc_where` binds `[{"upc": upc}]`; `seed_gold.sql` switched to the real object shape `[{"upc":"…"}]`. Regression tests added (model-level both shapes + integration: detail no longer 500s and flattens, search containment matches). Full suite green (147 passed); no OpenAPI change (fields stay `list[str]`).
 
 ### FirmProfile
 - Why is the `roles` jsonb column from `mart_firm_profile` not included?

@@ -29,6 +29,34 @@ async def test_filter_by_source(client: AsyncClient) -> None:
     assert ids == {"F-1001", "F-1006"}
 
 
+async def test_filter_by_source_multi_value_comma(client: AsyncClient) -> None:
+    # Comma-separated any-of (OR): FDA or USDA = both F-rows plus U-2002.
+    r = await client.get("/recalls", params={"source": "FDA,USDA", "limit": 100})
+    ids = {it["source_recall_id"] for it in r.json()["items"]}
+    assert ids == {"F-1001", "F-1006", "U-2002"}
+
+
+async def test_filter_by_source_multi_value_repeated(client: AsyncClient) -> None:
+    # Repeated-param form is equivalent to the comma form.
+    r = await client.get("/recalls?source=FDA&source=USDA&limit=100")
+    ids = {it["source_recall_id"] for it in r.json()["items"]}
+    assert ids == {"F-1001", "F-1006", "U-2002"}
+
+
+async def test_filter_by_classification_multi_value(client: AsyncClient) -> None:
+    r = await client.get("/recalls", params={"classification": "Class I,Class III", "limit": 100})
+    ids = {it["source_recall_id"] for it in r.json()["items"]}
+    assert ids == {"F-1001", "F-1006"}  # Class I (F-1001) + Class III (F-1006)
+
+
+async def test_multi_value_within_field_or_across_fields_and(client: AsyncClient) -> None:
+    # source any-of OR, AND-ed with classification: (FDA or USDA) and Class I = F-1001 only.
+    r = await client.get(
+        "/recalls", params={"source": "FDA,USDA", "classification": "Class I", "limit": 100}
+    )
+    assert {it["source_recall_id"] for it in r.json()["items"]} == {"F-1001"}
+
+
 async def test_is_active_true_excludes_null_sources(client: AsyncClient) -> None:
     # is_active=true matches only sources that carry status; CPSC/NHTSA (null) must NOT appear.
     r = await client.get("/recalls", params={"is_active": "true", "limit": 100})
@@ -107,6 +135,15 @@ async def test_filter_by_distribution_state(client: AsyncClient) -> None:
     hit = await client.get("/recalls", params={"distribution_state": "ca", "limit": 100})
     assert {it["source_recall_id"] for it in hit.json()["items"]} == {"U-2002"}
     miss = await client.get("/recalls", params={"distribution_state": "NY", "limit": 100})
+    assert miss.json()["items"] == []
+
+
+async def test_filter_by_distribution_state_multi_value_overlap(client: AsyncClient) -> None:
+    # Array overlap (&&) any-of: U-2002 ships to {CA, OR, WA}; {NY, CA} overlaps -> hit.
+    hit = await client.get("/recalls", params={"distribution_state": "NY,CA", "limit": 100})
+    assert {it["source_recall_id"] for it in hit.json()["items"]} == {"U-2002"}
+    # No overlap with the seeded states -> empty.
+    miss = await client.get("/recalls", params={"distribution_state": "NY,TX", "limit": 100})
     assert miss.json()["items"] == []
 
 
@@ -236,6 +273,13 @@ async def test_detail_hit_full_fields(client: AsyncClient) -> None:
     assert len(d["firms"]) == 1
     assert d["firms"][0]["name"] == "Acme Foods Inc"
     assert d["distribution_states"] == "Nationwide"  # scalar prose string
+
+
+async def test_detail_upc_recall_does_not_500_and_flattens(client: AsyncClient) -> None:
+    # Regression: gold stores UPCs as [{"upc": "X"}] objects; the detail must flatten, not 500.
+    r = await client.get("/recalls/fda/F-1001")
+    assert r.status_code == 200
+    assert r.json()["product_upcs"] == ["012345678905"]
 
 
 async def test_detail_source_is_case_insensitive(client: AsyncClient) -> None:

@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncConnection
 
 from recalls_api import deps
 from recalls_api.errors import LIST_ERRORS, InvalidParameter
-from recalls_api.models.common import Page, Source
+from recalls_api.models.common import Page
 from recalls_api.models.products import ProductSearchHit
 from recalls_api.pagination import Cursor, build_page, slice_page
 from recalls_api.queries import products as pq
@@ -24,7 +24,8 @@ _DESC = (
     "matches. `upc` is matched at the RECALL level via containment (the per-product UPC field "
     "is empty), so each hit carries `upc_is_recall_level: true` — a miss means no recall lists "
     "that UPC, not that the product was never recalled. Supply at least one of q, hin, model, "
-    "upc (else 422). Precedence when several given: q > hin/model > upc; source AND-s any path."
+    "upc (else 422). Precedence when several given: q > hin/model > upc. `source` AND-s any path "
+    "and accepts multiple values (repeat or comma-separate) for any-of (OR)."
 )
 
 
@@ -53,7 +54,10 @@ async def search_products(
     upc: Annotated[
         str | None, Query(max_length=32, description="UPC — matched recall-level via containment.")
     ] = None,
-    source: Annotated[Source | None, Query(description="Optional source filter, AND-ed.")] = None,
+    source: Annotated[
+        deps.SourceList,
+        Query(description="Optional source filter, AND-ed; repeat/comma-separate for any-of (OR)."),
+    ] = None,
 ) -> Page[ProductSearchHit]:
     # Precedence q > identifier > upc; require at least one selector (422 otherwise).
     stmt: Select

@@ -48,6 +48,19 @@ async def test_source_is_anded(client: AsyncClient) -> None:
     assert {h["recall_product_id"] for h in fda["items"]} == {"rp-001", "rp-005"}
 
 
+async def test_source_multi_value_any_of(client: AsyncClient) -> None:
+    # source any-of (OR): FDA or USCG still returns only the acme (FDA) products; USCG adds none.
+    body = (await client.get("/products/search", params={"q": "acme", "source": "FDA,USCG"})).json()
+    assert {h["recall_product_id"] for h in body["items"]} == {"rp-001", "rp-005"}
+
+
+async def test_upc_object_shape_containment_matches(client: AsyncClient) -> None:
+    # Regression: recall_product_upcs is [{"upc": "X"}] in gold; containment must still match.
+    body = (await client.get("/products/search", params={"upc": "012345678905"})).json()
+    assert {h["recall_product_id"] for h in body["items"]} == {"rp-001"}
+    assert body["items"][0]["recall_product_upcs"] == ["012345678905"]  # flattened in the response
+
+
 async def test_require_one_selector_returns_422(client: AsyncClient) -> None:
     r = await client.get("/products/search")
     assert r.status_code == 422

@@ -12,7 +12,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from recalls_api.models.common import Source
+from recalls_api.models.common import Source, flatten_upcs
 
 
 class ProductSearchHit(BaseModel):
@@ -39,7 +39,9 @@ class ProductSearchHit(BaseModel):
     url: str | None = None
     is_active: bool | None = None
     firm_name: str | None = None
-    recall_product_upcs: list[str] = Field(default_factory=list)
+    recall_product_upcs: list[str] = Field(
+        default_factory=list, description="Recall-level UPCs, flattened from gold's object array."
+    )
     rank: float | None = Field(
         default=None, description="Relevance; present only for keyword (q) search."
     )
@@ -50,5 +52,6 @@ class ProductSearchHit(BaseModel):
 
     @field_validator("recall_product_upcs", mode="before")
     @classmethod
-    def _none_to_list(cls, v: Any) -> Any:
-        return [] if v is None else v
+    def _flatten_recall_upcs(cls, v: Any) -> Any:
+        # Gold stores UPCs as [{"upc": "X"}] objects; unwrap to bare strings (and None -> []).
+        return flatten_upcs(v)

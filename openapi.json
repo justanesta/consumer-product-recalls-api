@@ -66,7 +66,7 @@
           "recalls"
         ],
         "summary": "List recalls (newest first), with filters and keyset pagination.",
-        "description": "Recalls across CPSC, FDA, USDA, NHTSA, USCG, newest first (`published_at DESC`), keyset (seek) paginated — pass the previous page's `next_cursor` back as `cursor`. Filters AND together: `source`, `classification`, `is_active`, `lifecycle_status`, `distribution_scope`, `distribution_state`, `distribution_country`, `source_recall_id`, `firm`, plus the `published_*` and `announced_*` date ranges. Caveats: `classification`/`lifecycle_status` are source-native (not unified); `is_active`/`lifecycle_status` are null for CPSC/NHTSA (a value filter excludes those rows); `announced_at` is nullable (an `announced_*` filter drops rows lacking it); `distribution_state`/`distribution_country` are FDA/USDA-only and `distribution_country` is foreign-only (`US` excluded by design); `source_recall_id` is exact, unique only with `source` (use the detail route); `firm` is an unindexed substring filter. Total is omitted unless `with_total=true`.",
+        "description": "Recalls across CPSC, FDA, USDA, NHTSA, USCG, newest first (`published_at DESC`), keyset (seek) paginated — pass the previous page's `next_cursor` back as `cursor`. Filters AND together: `source`, `classification`, `is_active`, `lifecycle_status`, `distribution_scope`, `distribution_state`, `distribution_country`, `source_recall_id`, `firm`, plus the `published_*` and `announced_*` date ranges. The categorical filters (`source`, `classification`, `lifecycle_status`, `distribution_scope`, `distribution_state`, `distribution_country`) accept multiple values — repeat the param or comma-separate (`?source=CPSC,FDA`) for any-of (OR) within a field; different fields still AND. Caveats: `classification`/`lifecycle_status` are source-native (not unified); `is_active`/`lifecycle_status` are null for CPSC/NHTSA (a value filter excludes those rows); `announced_at` is nullable (an `announced_*` filter drops rows lacking it); `distribution_state`/`distribution_country` are FDA/USDA-only and `distribution_country` is foreign-only (`US` excluded by design); `source_recall_id` is exact, unique only with `source` (use the detail route); `firm` is an unindexed substring filter. Total is omitted unless `with_total=true`.",
         "operationId": "list_recalls_recalls_get",
         "parameters": [
           {
@@ -76,16 +76,19 @@
             "schema": {
               "anyOf": [
                 {
-                  "$ref": "#/components/schemas/Source"
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Source"
+                  }
                 },
                 {
                   "type": "null"
                 }
               ],
-              "description": "Filter by issuing agency.",
+              "description": "Issuing agency; repeat or comma-separate for any-of (OR).",
               "title": "Source"
             },
-            "description": "Filter by issuing agency."
+            "description": "Issuing agency; repeat or comma-separate for any-of (OR)."
           },
           {
             "name": "classification",
@@ -94,17 +97,20 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string",
-                  "maxLength": 64
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "maxLength": 64
+                  }
                 },
                 {
                   "type": "null"
                 }
               ],
-              "description": "EXACT match on the source-native classification string.",
+              "description": "EXACT source-native classification(s); repeat/comma-separate for any-of.",
               "title": "Classification"
             },
-            "description": "EXACT match on the source-native classification string."
+            "description": "EXACT source-native classification(s); repeat/comma-separate for any-of."
           },
           {
             "name": "is_active",
@@ -189,16 +195,19 @@
             "schema": {
               "anyOf": [
                 {
-                  "$ref": "#/components/schemas/DistributionScope"
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DistributionScope"
+                  }
                 },
                 {
                   "type": "null"
                 }
               ],
-              "description": "One of the 4 gold distribution scopes (validated; 422 otherwise).",
+              "description": "Gold distribution scope(s); repeat/comma-separate for any-of (422 on a bad value).",
               "title": "Distribution Scope"
             },
-            "description": "One of the 4 gold distribution scopes (validated; 422 otherwise)."
+            "description": "Gold distribution scope(s); repeat/comma-separate for any-of (422 on a bad value)."
           },
           {
             "name": "lifecycle_status",
@@ -207,17 +216,20 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string",
-                  "maxLength": 64
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "maxLength": 64
+                  }
                 },
                 {
                   "type": "null"
                 }
               ],
-              "description": "EXACT match; source-native, null for CPSC/NHTSA (excludes those rows).",
+              "description": "EXACT source-native status(es); repeat/comma-separate for any-of. Null for CPSC/NHTSA (excludes those rows).",
               "title": "Lifecycle Status"
             },
-            "description": "EXACT match; source-native, null for CPSC/NHTSA (excludes those rows)."
+            "description": "EXACT source-native status(es); repeat/comma-separate for any-of. Null for CPSC/NHTSA (excludes those rows)."
           },
           {
             "name": "announced_after",
@@ -284,18 +296,21 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string",
-                  "minLength": 2,
-                  "maxLength": 2
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 2
+                  }
                 },
                 {
                   "type": "null"
                 }
               ],
-              "description": "USPS 2-letter code; recalls distributed to this state (FDA/USDA only).",
+              "description": "USPS 2-letter code(s); recalls distributed to ANY (FDA/USDA only). Repeat/comma-separate for any-of.",
               "title": "Distribution State"
             },
-            "description": "USPS 2-letter code; recalls distributed to this state (FDA/USDA only)."
+            "description": "USPS 2-letter code(s); recalls distributed to ANY (FDA/USDA only). Repeat/comma-separate for any-of."
           },
           {
             "name": "distribution_country",
@@ -304,18 +319,21 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string",
-                  "minLength": 2,
-                  "maxLength": 2
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 2
+                  }
                 },
                 {
                   "type": "null"
                 }
               ],
-              "description": "ISO alpha-2; FOREIGN distribution only ('US' excluded by design).",
+              "description": "ISO alpha-2 code(s); FOREIGN distribution only ('US' excluded by design). Repeat/comma-separate for any-of.",
               "title": "Distribution Country"
             },
-            "description": "ISO alpha-2; FOREIGN distribution only ('US' excluded by design)."
+            "description": "ISO alpha-2 code(s); FOREIGN distribution only ('US' excluded by design). Repeat/comma-separate for any-of."
           },
           {
             "name": "limit",
@@ -445,16 +463,19 @@
             "schema": {
               "anyOf": [
                 {
-                  "$ref": "#/components/schemas/Source"
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Source"
+                  }
                 },
                 {
                   "type": "null"
                 }
               ],
-              "description": "Filter by issuing agency.",
+              "description": "Issuing agency; repeat or comma-separate for any-of (OR).",
               "title": "Source"
             },
-            "description": "Filter by issuing agency."
+            "description": "Issuing agency; repeat or comma-separate for any-of (OR)."
           },
           {
             "name": "classification",
@@ -463,17 +484,20 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string",
-                  "maxLength": 64
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "maxLength": 64
+                  }
                 },
                 {
                   "type": "null"
                 }
               ],
-              "description": "EXACT match on the source-native classification string.",
+              "description": "EXACT source-native classification(s); repeat/comma-separate for any-of.",
               "title": "Classification"
             },
-            "description": "EXACT match on the source-native classification string."
+            "description": "EXACT source-native classification(s); repeat/comma-separate for any-of."
           },
           {
             "name": "is_active",
@@ -558,16 +582,19 @@
             "schema": {
               "anyOf": [
                 {
-                  "$ref": "#/components/schemas/DistributionScope"
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DistributionScope"
+                  }
                 },
                 {
                   "type": "null"
                 }
               ],
-              "description": "One of the 4 gold distribution scopes (validated; 422 otherwise).",
+              "description": "Gold distribution scope(s); repeat/comma-separate for any-of (422 on a bad value).",
               "title": "Distribution Scope"
             },
-            "description": "One of the 4 gold distribution scopes (validated; 422 otherwise)."
+            "description": "Gold distribution scope(s); repeat/comma-separate for any-of (422 on a bad value)."
           },
           {
             "name": "lifecycle_status",
@@ -576,17 +603,20 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string",
-                  "maxLength": 64
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "maxLength": 64
+                  }
                 },
                 {
                   "type": "null"
                 }
               ],
-              "description": "EXACT match; source-native, null for CPSC/NHTSA (excludes those rows).",
+              "description": "EXACT source-native status(es); repeat/comma-separate for any-of. Null for CPSC/NHTSA (excludes those rows).",
               "title": "Lifecycle Status"
             },
-            "description": "EXACT match; source-native, null for CPSC/NHTSA (excludes those rows)."
+            "description": "EXACT source-native status(es); repeat/comma-separate for any-of. Null for CPSC/NHTSA (excludes those rows)."
           },
           {
             "name": "announced_after",
@@ -653,18 +683,21 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string",
-                  "minLength": 2,
-                  "maxLength": 2
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 2
+                  }
                 },
                 {
                   "type": "null"
                 }
               ],
-              "description": "USPS 2-letter code; recalls distributed to this state (FDA/USDA only).",
+              "description": "USPS 2-letter code(s); recalls distributed to ANY (FDA/USDA only). Repeat/comma-separate for any-of.",
               "title": "Distribution State"
             },
-            "description": "USPS 2-letter code; recalls distributed to this state (FDA/USDA only)."
+            "description": "USPS 2-letter code(s); recalls distributed to ANY (FDA/USDA only). Repeat/comma-separate for any-of."
           },
           {
             "name": "distribution_country",
@@ -673,18 +706,21 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string",
-                  "minLength": 2,
-                  "maxLength": 2
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 2
+                  }
                 },
                 {
                   "type": "null"
                 }
               ],
-              "description": "ISO alpha-2; FOREIGN distribution only ('US' excluded by design).",
+              "description": "ISO alpha-2 code(s); FOREIGN distribution only ('US' excluded by design). Repeat/comma-separate for any-of.",
               "title": "Distribution Country"
             },
-            "description": "ISO alpha-2; FOREIGN distribution only ('US' excluded by design)."
+            "description": "ISO alpha-2 code(s); FOREIGN distribution only ('US' excluded by design). Repeat/comma-separate for any-of."
           },
           {
             "name": "limit",
@@ -879,7 +915,7 @@
           "products"
         ],
         "summary": "Search recalled products by keyword (full-text) or exact identifier.",
-        "description": "Searches recalled products. Keyword (`q`) is a Postgres full-text search over product name, description, recall title, and firm name, ranked by relevance (`rank`); token/prefix matching only, NO fuzzy/typo search. Identifier (`hin`, `model`) are exact matches. `upc` is matched at the RECALL level via containment (the per-product UPC field is empty), so each hit carries `upc_is_recall_level: true` — a miss means no recall lists that UPC, not that the product was never recalled. Supply at least one of q, hin, model, upc (else 422). Precedence when several given: q > hin/model > upc; source AND-s any path.",
+        "description": "Searches recalled products. Keyword (`q`) is a Postgres full-text search over product name, description, recall title, and firm name, ranked by relevance (`rank`); token/prefix matching only, NO fuzzy/typo search. Identifier (`hin`, `model`) are exact matches. `upc` is matched at the RECALL level via containment (the per-product UPC field is empty), so each hit carries `upc_is_recall_level: true` — a miss means no recall lists that UPC, not that the product was never recalled. Supply at least one of q, hin, model, upc (else 422). Precedence when several given: q > hin/model > upc. `source` AND-s any path and accepts multiple values (repeat or comma-separate) for any-of (OR).",
         "operationId": "search_products_products_search_get",
         "parameters": [
           {
@@ -966,16 +1002,19 @@
             "schema": {
               "anyOf": [
                 {
-                  "$ref": "#/components/schemas/Source"
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Source"
+                  }
                 },
                 {
                   "type": "null"
                 }
               ],
-              "description": "Optional source filter, AND-ed.",
+              "description": "Optional source filter, AND-ed; repeat/comma-separate for any-of (OR).",
               "title": "Source"
             },
-            "description": "Optional source filter, AND-ed."
+            "description": "Optional source filter, AND-ed; repeat/comma-separate for any-of (OR)."
           },
           {
             "name": "limit",
@@ -1895,7 +1934,8 @@
               "type": "string"
             },
             "type": "array",
-            "title": "Recall Product Upcs"
+            "title": "Recall Product Upcs",
+            "description": "Recall-level UPCs, flattened from gold's object array."
           },
           "rank": {
             "anyOf": [
@@ -2163,7 +2203,7 @@
             },
             "type": "array",
             "title": "Product Upcs",
-            "description": "Recall-level UPCs."
+            "description": "Recall-level UPCs (CPSC-sourced; sparse). Flattened from gold's object array."
           },
           "product_names": {
             "items": {

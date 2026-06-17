@@ -11,7 +11,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from recalls_api.models.common import FirmRef, Source
+from recalls_api.models.common import FirmRef, Source, flatten_upcs
 
 
 class RecallSummary(BaseModel):
@@ -89,7 +89,10 @@ class RecallDetail(BaseModel):
     hazards: list[Any] | None = Field(
         default=None, description="Opaque hazard objects; may be null."
     )
-    product_upcs: list[str] = Field(default_factory=list, description="Recall-level UPCs.")
+    product_upcs: list[str] = Field(
+        default_factory=list,
+        description="Recall-level UPCs (CPSC-sourced; sparse). Flattened from gold's object array.",
+    )
     product_names: list[str] = Field(default_factory=list)
     models: list[str] = Field(default_factory=list)
     hins: list[str] = Field(default_factory=list, description="USCG Hull IDs.")
@@ -101,8 +104,14 @@ class RecallDetail(BaseModel):
     is_currently_active: bool | None = None
     was_ever_retracted: bool | None = None
 
-    @field_validator("product_upcs", "product_names", "models", "hins", "firms", mode="before")
+    @field_validator("product_names", "models", "hins", "firms", mode="before")
     @classmethod
     def _none_to_list(cls, v: Any) -> Any:
         # The mart leaves these jsonb arrays NULL when empty (01 NULL-vs-coalesce).
         return [] if v is None else v
+
+    @field_validator("product_upcs", mode="before")
+    @classmethod
+    def _flatten_product_upcs(cls, v: Any) -> Any:
+        # Gold stores UPCs as [{"upc": "X"}] objects; unwrap to bare strings (and None -> []).
+        return flatten_upcs(v)

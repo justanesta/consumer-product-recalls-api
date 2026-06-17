@@ -9,16 +9,58 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import Depends, Query
+from pydantic import BeforeValidator, StringConstraints
 
 from recalls_api.db import get_conn as get_conn  # re-export; tests override deps.get_conn
 from recalls_api.models.common import DistributionScope, Source
 from recalls_api.pagination import Cursor
 from recalls_api.settings import Settings, get_settings
 
-__all__ = ["PaginationParams", "RecallFilters", "get_conn", "pagination_params", "recall_filters"]
+__all__ = [
+    "PaginationParams",
+    "RecallFilters",
+    "SourceList",
+    "get_conn",
+    "pagination_params",
+    "recall_filters",
+    "split_query_list",
+]
+
+
+def split_query_list(value: Any) -> Any:
+    """Split comma-bearing query elements so ``?x=A,B`` is equivalent to ``?x=A&x=B`` (repeated).
+
+    FastAPI collects a multi-value query param into a list before validation; this runs as a
+    ``BeforeValidator`` on that list and expands any element that itself contains commas (before
+    enum/length coercion of the elements). Safe because none of the multi-value filters' legal
+    values contain a comma — that is exactly why ``firm``/date filters stay single-value. An absent
+    param (``None``) passes straight through.
+    """
+    if not isinstance(value, list):
+        return value
+    out: list[Any] = []
+    for item in value:
+        if isinstance(item, str) and "," in item:
+            out.extend(part.strip() for part in item.split(",") if part.strip())
+        else:
+            out.append(item)
+    return out
+
+
+# Per-element constraints for the multi-value filters (applied to each element, not the list).
+_Str64 = Annotated[str, StringConstraints(max_length=64)]
+_Code2 = Annotated[str, StringConstraints(min_length=2, max_length=2)]
+
+# Comma-tolerant multi-value query types. Each declares an OpenAPI array param (repeated form) AND
+# accepts a single comma-separated value via ``split_query_list``. None when the param is absent.
+SourceList = Annotated[list[Source] | None, BeforeValidator(split_query_list)]
+_ClassificationList = Annotated[list[_Str64] | None, BeforeValidator(split_query_list)]
+_ScopeList = Annotated[list[DistributionScope] | None, BeforeValidator(split_query_list)]
+_LifecycleList = Annotated[list[_Str64] | None, BeforeValidator(split_query_list)]
+_CodeList = Annotated[list[_Code2] | None, BeforeValidator(split_query_list)]
 
 
 @dataclass(slots=True)
@@ -45,28 +87,35 @@ def pagination_params(
 
 @dataclass(slots=True)
 class RecallFilters:
-    source: Source | None
-    classification: str | None
+    # Multi-value categorical filters: a list means any-of (OR) within the field; different fields
+    # still AND. None/empty = unset. Geo lists use array overlap (&&); the rest use IN.
+    source: list[Source] | None
+    classification: list[str] | None
     is_active: bool | None
     published_after: date | None
     published_before: date | None
     firm: str | None
     # Dimension filters (defaulted so existing positional constructions stay valid).
-    distribution_scope: DistributionScope | None = None
-    lifecycle_status: str | None = None
+    distribution_scope: list[DistributionScope] | None = None
+    lifecycle_status: list[str] | None = None
     announced_after: date | None = None
     announced_before: date | None = None
     source_recall_id: str | None = None
-    # Geo array-containment filters (GIN-backed upstream).
-    distribution_state: str | None = None
-    distribution_country: str | None = None
+    # Geo array-overlap filters (GIN-backed upstream).
+    distribution_state: list[str] | None = None
+    distribution_country: list[str] | None = None
 
 
 def recall_filters(
-    source: Annotated[Source | None, Query(description="Filter by issuing agency.")] = None,
+    source: Annotated[
+        SourceList,
+        Query(description="Issuing agency; repeat or comma-separate for any-of (OR)."),
+    ] = None,
     classification: Annotated[
-        str | None,
-        Query(max_length=64, description="EXACT match on the source-native classification string."),
+        _ClassificationList,
+        Query(
+            description="EXACT source-native classification(s); repeat/comma-separate for any-of."
+        ),
     ] = None,
     is_active: Annotated[
         bool | None,
@@ -83,14 +132,17 @@ def recall_filters(
         Query(min_length=2, max_length=200, description="Case-insensitive substring (unindexed)."),
     ] = None,
     distribution_scope: Annotated[
-        DistributionScope | None,
-        Query(description="One of the 4 gold distribution scopes (validated; 422 otherwise)."),
+        _ScopeList,
+        Query(
+            description="Gold distribution scope(s); repeat/comma-separate for any-of (422 on a "
+            "bad value)."
+        ),
     ] = None,
     lifecycle_status: Annotated[
-        str | None,
+        _LifecycleList,
         Query(
-            max_length=64,
-            description="EXACT match; source-native, null for CPSC/NHTSA (excludes those rows).",
+            description="EXACT source-native status(es); repeat/comma-separate for any-of. "
+            "Null for CPSC/NHTSA (excludes those rows).",
         ),
     ] = None,
     announced_after: Annotated[
@@ -112,19 +164,17 @@ def recall_filters(
         ),
     ] = None,
     distribution_state: Annotated[
-        str | None,
+        _CodeList,
         Query(
-            min_length=2,
-            max_length=2,
-            description="USPS 2-letter code; recalls distributed to this state (FDA/USDA only).",
+            description="USPS 2-letter code(s); recalls distributed to ANY (FDA/USDA only). "
+            "Repeat/comma-separate for any-of.",
         ),
     ] = None,
     distribution_country: Annotated[
-        str | None,
+        _CodeList,
         Query(
-            min_length=2,
-            max_length=2,
-            description="ISO alpha-2; FOREIGN distribution only ('US' excluded by design).",
+            description="ISO alpha-2 code(s); FOREIGN distribution only ('US' excluded by design). "
+            "Repeat/comma-separate for any-of.",
         ),
     ] = None,
 ) -> RecallFilters:

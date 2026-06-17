@@ -41,9 +41,26 @@ def test_list_stmt_no_filters_has_no_where() -> None:
 
 
 def test_list_stmt_source_filter_binds_value() -> None:
-    c = _compiled(q.list_stmt(RecallFilters(Source.FDA, None, None, None, None, None), None, 25))
-    assert c.params["source"] == "FDA"
+    c = _compiled(q.list_stmt(RecallFilters([Source.FDA], None, None, None, None, None), None, 25))
+    assert c.params["source"] == ["FDA"]  # expanding IN list
+    assert " IN " in str(c).upper()
     assert "WHERE" in str(c).upper()
+
+
+def test_list_stmt_source_multi_value_uses_expanding_in() -> None:
+    c = _compiled(
+        q.list_stmt(
+            RecallFilters([Source.FDA, Source.CPSC], None, None, None, None, None), None, 25
+        )
+    )
+    assert c.params["source"] == ["FDA", "CPSC"]  # any-of (OR) within the field
+    assert " IN " in str(c).upper()
+
+
+def test_list_stmt_classification_multi_value() -> None:
+    f = RecallFilters(None, ["Class I", "Class II"], None, None, None, None)
+    c = _compiled(q.list_stmt(f, None, 25))
+    assert c.params["classification"] == ["Class I", "Class II"]
 
 
 def test_list_stmt_limit_is_plus_one() -> None:
@@ -88,23 +105,23 @@ def test_keyset_where_parses_cursor_to_datetime() -> None:
 
 
 def test_count_stmt_reuses_predicates() -> None:
-    c = _compiled(q.list_count_stmt(RecallFilters(Source.USDA, None, None, None, None, None)))
-    assert c.params["source"] == "USDA"
+    c = _compiled(q.list_count_stmt(RecallFilters([Source.USDA], None, None, None, None, None)))
+    assert c.params["source"] == ["USDA"]
     assert "COUNT(" in str(c).upper()
 
 
 def test_distribution_scope_filter_binds_enum_value() -> None:
     f = RecallFilters(
-        None, None, None, None, None, None, distribution_scope=DistributionScope.REGIONAL
+        None, None, None, None, None, None, distribution_scope=[DistributionScope.REGIONAL]
     )
     c = _compiled(q.list_stmt(f, None, 25))
-    assert c.params["dist_scope"] == "Regional"
+    assert c.params["dist_scope"] == ["Regional"]
 
 
 def test_lifecycle_status_filter_binds_value() -> None:
-    f = RecallFilters(None, None, None, None, None, None, lifecycle_status="Ongoing")
+    f = RecallFilters(None, None, None, None, None, None, lifecycle_status=["Ongoing", "Open"])
     c = _compiled(q.list_stmt(f, None, 25))
-    assert c.params["lifecycle"] == "Ongoing"
+    assert c.params["lifecycle"] == ["Ongoing", "Open"]
 
 
 def test_announced_after_is_inclusive_same_day() -> None:
@@ -125,17 +142,18 @@ def test_source_recall_id_filter_uses_equality() -> None:
     assert c.params["source_recall_id"] == "F-1001"
 
 
-def test_distribution_state_filter_uppercases_and_uses_array_contains() -> None:
-    f = RecallFilters(None, None, None, None, None, None, distribution_state="ca")
+def test_distribution_state_filter_uppercases_and_uses_array_overlap() -> None:
+    f = RecallFilters(None, None, None, None, None, None, distribution_state=["ca", "or"])
     c = _compiled(q.list_stmt(f, None, 25))
-    assert c.params["dist_state"] == ["CA"]  # normalized to uppercase
-    assert "@>" in str(c)
+    assert c.params["dist_state"] == ["CA", "OR"]  # normalized to uppercase, any-of
+    assert "&&" in str(c)  # array overlap, not containment
 
 
 def test_distribution_country_filter_uppercases() -> None:
-    f = RecallFilters(None, None, None, None, None, None, distribution_country="mx")
+    f = RecallFilters(None, None, None, None, None, None, distribution_country=["mx", "gb"])
     c = _compiled(q.list_stmt(f, None, 25))
-    assert c.params["dist_country"] == ["MX"]
+    assert c.params["dist_country"] == ["MX", "GB"]
+    assert "&&" in str(c)
 
 
 def test_search_stmt_uses_fts_and_binds_q() -> None:
@@ -149,10 +167,10 @@ def test_search_stmt_uses_fts_and_binds_q() -> None:
 
 def test_search_stmt_applies_filters() -> None:
     c = _compiled(
-        q.search_stmt(RecallFilters(Source.FDA, None, None, None, None, None), "acme", None, 25)
+        q.search_stmt(RecallFilters([Source.FDA], None, None, None, None, None), "acme", None, 25)
     )
     assert c.params["q"] == "acme"
-    assert c.params["source"] == "FDA"
+    assert c.params["source"] == ["FDA"]
 
 
 def test_search_count_stmt_counts_matches() -> None:
