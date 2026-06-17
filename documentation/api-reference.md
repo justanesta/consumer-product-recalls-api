@@ -445,11 +445,14 @@ GET /firms/{firm_id}
 | `firm_id` | string | Opaque 32-hex md5 cluster id. |
 | `canonical_name` | string | Representative name for the cluster. |
 | `normalized_name` | string | Lowercased/trimmed canonical name used for matching. |
-| `observed_names` | list[string] | All name variants seen across agencies. |
+| `observed_names` | list[string] | All raw name variants that merged into this cluster (the merge audit trail). |
+| `observed_company_ids` | list[string] | Every structured government id that folded into this cluster — FDA FEI, USDA/FSIS establishment number, USCG MIC, CPSC company_id. Also the join key to the three sidecars below. |
+| `alternate_names` | list[string] | Brand / DBA surface-form aliases (the DBA brand plus brand-bearing parentheticals), kept as a search/alias field — distinct from the raw spellings in `observed_names`. |
 | `total_recalls` | integer | Total recall count across all sources. |
 | `active_recalls` | integer | Count of recalls currently marked active. |
 | `first_recall_at` | datetime \| null | Earliest recall date for this firm. |
 | `last_recall_at` | datetime \| null | Most recent recall date for this firm. |
+| `roles` | list[string] | Distinct roles this firm has played across its recalls: `manufacturer`, `establishment`, `filer`, `importer`, `distributor`. |
 | `recalls_by_source` | object | Map of source → recall count, e.g. `{"CPSC": 3, "FDA": 1}`. |
 | `distinct_products` | integer | Number of distinct product records linked to this firm. |
 | `firm_usda_attributes` | list[UsdaEstablishment] | USDA/FSIS establishment records. Empty for non-USDA firms. |
