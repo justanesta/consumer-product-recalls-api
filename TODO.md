@@ -193,3 +193,39 @@ General Question. Provenance is currently scattered prose (api-reference caveats
 - [ ] `reason_category` — mark **USDA-only**.
 - [ ] `distribution_country_codes` — correct "FDA/USDA" → **FDA-only in practice** (USDA=0).
 - [ ] product `model` — mark **CPSC+NHTSA-only**.
+
+> **Note (2026-06-17):** the inline provenance ground-truth in this item is **superseded** by the empirical [`project_scope/provenance-analysis-2026-06-17.md`](project_scope/provenance-analysis-2026-06-17.md) (e.g. product `model` is **NHTSA-only for real values**; CPSC is empty-string `""`, soon NULL after the pipeline fix). Use the deliverable's matrix as SSOT for the apply; the checkboxes above stand as the original audit pointers.
+
+## Performance
+
+### Stop projecting pipeline-observability fields from the API (audit Q2 / provenance analysis)
+
+**Goal:** drop the internal pipeline-observability proxies the API currently exposes. They imply
+authoritative agency semantics they don't have, several are source-partial (null for most sources),
+and they duplicate/confuse `is_active`. Keep only `has_been_edited` as a single honest "revised"
+signal. Source of the finding:
+[`project_scope/provenance-analysis-2026-06-17.md`](project_scope/provenance-analysis-2026-06-17.md)
+(§3.58-3.64 + systemic findings); resolves the audit's RecallDetail observability-field question.
+
+**Drop from the API response models** (this is **API-only** — the pipeline keeps these in gold for its
+own observability; the API just stops projecting them):
+- [ ] `is_currently_active`, `was_ever_retracted` (`RecallDetail`) — {USDA,NHTSA}-only *presence-manifest*
+  flags (NULL for CPSC/FDA/USCG); names imply authoritative status they lack; `is_currently_active` is
+  conflated with the lifecycle `is_active`.
+- [ ] `first_seen_at`, `last_seen_at` (`RecallDetail`) — our cron's first/last *poll* timestamps
+  (pipeline internals; `last_seen_at` already ruled out as a "last edited" date — see the "last revised"
+  Features item).
+- [ ] `edit_count`, `edit_event_count` — numeric pipeline-*detection* counts (content-hash versions /
+  history-row counts); imply agency-edit semantics; redundant with each other and with `has_been_edited`.
+  Note `edit_event_count` is in BOTH the list projection (`_LIST_COLS` → `RecallSummary`) and `RecallDetail`.
+
+**Keep:** `has_been_edited` (boolean) as the one honest "changed since first ingest" flag — pending a
+quick check of `consumer-product-recalls/project_scope/future-repos/website-frontend-plan.md` §5.3 (if
+the detail page has no "revised" badge, drop this too).
+
+**Mechanics — fold into the Provenance apply workflow:** remove the columns from `queries/recalls.py`
+(`_LIST_COLS` + the `sa.table()` literal), the fields from `models/recalls.py` (`RecallSummary` +
+`RecallDetail`), update `tests/fixtures/seed_gold.sql` + the affected unit/integration tests, regenerate
+`openapi.json`, and reflect the removals in `documentation/data_contract.md` (detail projection list) and
+`documentation/api-reference.md` (RecallDetail field table). **Breaking** to the OpenAPI contract — do it
+now while pre-go-live (no consumers); after launch it would need a deprecation cycle.
