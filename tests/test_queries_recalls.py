@@ -95,7 +95,7 @@ def test_is_active_filter_uses_equality() -> None:
 
 def test_keyset_where_parses_cursor_to_datetime() -> None:
     expr = published_at_keyset_where(
-        Cursor(("2026-01-01T00:00:00+00:00", "abc")),
+        Cursor(("2026-01-01T00:00:00+00:00", "abc"), "p"),
         q.recall_summary.c.published_at,
         q.recall_summary.c.recall_event_id,
     )

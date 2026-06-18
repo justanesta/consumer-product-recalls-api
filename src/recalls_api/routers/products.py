@@ -31,8 +31,8 @@ _DESC = (
 
 def _encode_cursor(row: dict, sort: str) -> str:
     if sort == "rank":
-        return Cursor((row["rank"], row["recall_product_id"])).encode()
-    return Cursor((row["published_at"].isoformat(), row["recall_product_id"])).encode()
+        return Cursor((row["rank"], row["recall_product_id"]), "r").encode()
+    return Cursor((row["published_at"].isoformat(), row["recall_product_id"]), "p").encode()
 
 
 @router.get(

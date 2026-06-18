@@ -66,7 +66,7 @@ async def list_recalls(
     page_rows, has_next = slice_page(rows, page.limit)
     next_cursor = (
         Cursor(
-            (page_rows[-1]["published_at"].isoformat(), page_rows[-1]["recall_event_id"])
+            (page_rows[-1]["published_at"].isoformat(), page_rows[-1]["recall_event_id"]), "p"
         ).encode()
         if has_next and page_rows
         else None
@@ -97,7 +97,7 @@ async def search_recalls(
     rows = list((await conn.execute(stmt)).mappings())
     page_rows, has_next = slice_page(rows, page.limit)
     next_cursor = (
-        Cursor((page_rows[-1]["rank"], page_rows[-1]["recall_event_id"])).encode()
+        Cursor((page_rows[-1]["rank"], page_rows[-1]["recall_event_id"]), "r").encode()
         if has_next and page_rows
         else None
     )
