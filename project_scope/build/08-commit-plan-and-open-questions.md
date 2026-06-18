@@ -107,7 +107,7 @@ uv run ruff check .
 uv run ruff format --check .
 uv run pyright
 uv run pytest --cov=recalls_api --cov-fail-under=85   # unit + integration + contract
-uv run python -m recalls_api.export_openapi > openapi.json   # regen; must be a no-op diff if unchanged
+uv run python -m recalls_api.export_openapi                  # regen (writes the file; no redirect)
 git diff --exit-code openapi.json                            # fail if spec drifted un-committed
 uv run pre-commit run --all-files
 ```

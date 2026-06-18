@@ -86,8 +86,8 @@ doesn't care whether the column comes from dbt or the seed.
 - **New `test_recalls_search.py`:** keyword match; rank ordering; `source` AND-filter; keyset
   pagination across pages; `q` too short → 422; no-match → empty page (not error); garbage/operator-y
   `q` is injection-safe (no 500). Mirror `tests/.../test_products_search` structure.
-- **Contract:** regenerate `openapi.json` (`python -m recalls_api.export_openapi > openapi.json`) and
-  let the drift test guard it.
+- **Contract:** regenerate `openapi.json` (`python -m recalls_api.export_openapi` — writes the file
+  directly, no redirect) and let the drift test guard it.
 
 ## Open decisions
 - Filters on search: start with `source` + `published_after`/`published_before` (cheap, AND-ed). Fold

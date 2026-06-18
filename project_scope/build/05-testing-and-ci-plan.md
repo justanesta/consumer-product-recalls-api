@@ -631,6 +631,20 @@ async def test_unfiltered_published_at_sort_is_full_sort(db_conn):
 
 ## 6. Contract tests
 
+> **🔄 Implemented differently (corrected 2026-06-17).** The shipped
+> `src/recalls_api/export_openapi.py` supersedes the stdout-based sketches in this section: it
+> **writes `openapi.json` directly** (it does not print the spec to stdout) and exposes a **`--check`**
+> flag that does the drift comparison internally. The real commands are
+> `uv run python -m recalls_api.export_openapi` to regenerate and
+> `uv run python -m recalls_api.export_openapi --check` to verify — **never** the `> openapi.json` /
+> `> /tmp/…` redirect forms shown below in §6.1–§6.2, the CI drift step, and the `openapi-snapshot`
+> pre-commit hook (redirecting would capture the script's `wrote …` stdout line and corrupt the file).
+> The live CI step (`.github/workflows/ci.yml`) and the `openapi-drift` pre-commit hook
+> (`.pre-commit-config.yaml`) both use `--check`. Authoritative home:
+> [ADR 0010](../../documentation/decisions/0010-openapi-committed-snapshot-drift-contract.md) and
+> [development.md](../../documentation/development.md). The sketches below are retained as historical
+> design context.
+
 ### 6.1 `src/recalls_api/export_openapi.py` — generator is source of truth (ADR 0024 §4)
 
 A **module under the package** (not a `scripts/` script), invoked as

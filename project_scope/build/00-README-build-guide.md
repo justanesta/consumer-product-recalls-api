@@ -56,7 +56,7 @@ Read in order; each builds on the prior:
 - **Error envelope:** `{"error": {"type", "detail", "request_id"}}`. Taxonomy: `ResourceNotFound`=404, `InvalidParameter`=422, **`BadCursor`=400**, `UpstreamUnavailable`=503 (+`Retry-After`), `RateLimited`=429 (+`Retry-After`); catch-all 500 logs the traceback and returns an opaque body (never leak SQL/DSN).
 - **Logging/observability:** structlog JSON to stdout; per-request `request_id` via contextvars middleware, echoed in the envelope + `X-Request-ID`. v1 = operator reads platform logs; no Sentry/OTel (named upgrade triggers in 06/ADR 0029).
 - **Testing/CI:** pytest, **`--cov-fail-under=85`**, offline/deterministic, never touches prod Neon; integration via `httpx.AsyncClient` + `ASGITransport` against a **seeded Postgres service container** (`seed_gold.sql`). CI gate: `uv sync → ruff check → ruff format --check → pyright → pytest → openapi drift → pre-commit run --all-files`.
-- **OpenAPI:** FastAPI-generated is the source of truth; `python -m recalls_api.export_openapi > openapi.json`; committed snapshot is the contract-test fixture (fail on drift).
+- **OpenAPI:** FastAPI-generated is the source of truth; `python -m recalls_api.export_openapi` (writes the file directly, no redirect; `--check` to verify); committed snapshot is the contract-test fixture (fail on drift).
 - **Deploy:** Fly.io (Render fallback; Cloudflare Workers rejected — asyncpg can't run on Pyodide/WASM). `min_machines_running=0`; cold DB → 503+`Retry-After` (never hang). HTTP cache headers keyed to the nightly ~03:00 UTC rebuild.
 
 ## Prerequisites & blockers
