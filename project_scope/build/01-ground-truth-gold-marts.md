@@ -65,13 +65,13 @@ One column, **source-dependent encoding** (ADR 0036 D2). Confirmed from `recall_
 | Source | classification values | risk_level | lifecycle_status source field & values |
 |---|---|---|---|
 | CPSC | `NULL` (no field in API) | `NULL` | `NULL` |
-| FDA | `center_classification_type_txt` → `Class I` / `Class II` / `Class III` (and source NC variants) | `NULL` | `phase_txt` → `Ongoing` / `Completed` / `Terminated` |
+| FDA | `center_classification_type_txt` → `1` / `2` / `3` / `NC` (Not Yet Classified) | `NULL` | `phase_txt` → `Ongoing` / `Completed` / `Terminated` |
 | USDA | `Class I` / `Class II` / `Class III` / `Public Health Alert` | derived 1:1 from classification: `High - Class I` / `Low - Class II` / `Marginal - Class III` / `Public Health Alert` | `recall_type` → `Active Recall` / `Public Health Alert` / `Closed Recall` |
 | NHTSA | `NULL` | `NULL` | `NULL` |
 | USCG | `severity` → `H` / `L` / `M` / `S` | `NULL` | `initcap(disposition)` → `Open` / `Closed` |
 
 **API consequence:** `classification` cannot be a single global `StrEnum` the client filters by value
-across sources — `Class I` (FDA/USDA) and `H` (USCG) coexist in the same column. Treat the `?classification=`
+across sources — `Class I` (USDA), `2` (FDA), and `H` (USCG) coexist in the same column. Treat the `?classification=`
 filter as a free string equality against the indexed column; document that its meaning is source-scoped.
 `risk_level` is **USDA-only** (NULL everywhere else). `lifecycle_status` is NULL for CPSC and NHTSA.
 

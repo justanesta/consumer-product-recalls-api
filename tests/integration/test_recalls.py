@@ -44,15 +44,16 @@ async def test_filter_by_source_multi_value_repeated(client: AsyncClient) -> Non
 
 
 async def test_filter_by_classification_multi_value(client: AsyncClient) -> None:
-    r = await client.get("/recalls", params={"classification": "Class I,Class III", "limit": 100})
+    r = await client.get("/recalls", params={"classification": "2,3", "limit": 100})
     ids = {it["source_recall_id"] for it in r.json()["items"]}
-    assert ids == {"F-1001", "F-1006"}  # Class I (F-1001) + Class III (F-1006)
+    assert ids == {"F-1001", "F-1006"}  # FDA classification 2 (F-1001) + 3 (F-1006)
 
 
 async def test_multi_value_within_field_or_across_fields_and(client: AsyncClient) -> None:
-    # source any-of OR, AND-ed with classification: (FDA or USDA) and Class I = F-1001 only.
+    # source any-of OR, AND-ed with classification: (FDA or USDA) and "2" = F-1001 only
+    # (F-1006 is "3", U-2002 is "Class II").
     r = await client.get(
-        "/recalls", params={"source": "FDA,USDA", "classification": "Class I", "limit": 100}
+        "/recalls", params={"source": "FDA,USDA", "classification": "2", "limit": 100}
     )
     assert {it["source_recall_id"] for it in r.json()["items"]} == {"F-1001"}
 
@@ -65,7 +66,7 @@ async def test_is_active_true_excludes_null_sources(client: AsyncClient) -> None
 
 
 async def test_filter_by_classification(client: AsyncClient) -> None:
-    r = await client.get("/recalls", params={"classification": "Class I", "limit": 100})
+    r = await client.get("/recalls", params={"classification": "2", "limit": 100})
     ids = {it["source_recall_id"] for it in r.json()["items"]}
     assert ids == {"F-1001"}
 
@@ -283,7 +284,7 @@ async def test_detail_hit_full_fields(client: AsyncClient) -> None:
     assert r.status_code == 200
     d = r.json()
     assert d["source"] == "FDA"
-    assert d["classification"] == "Class I"
+    assert d["classification"] == "2"
     assert d["product_names"] == ["Acme Peanut Butter 16oz", "Acme Peanut Butter 32oz"]
     assert d["models"] == []  # NULL in mart -> coerced to []
     assert d["hins"] == []

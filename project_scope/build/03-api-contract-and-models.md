@@ -159,7 +159,7 @@ against the date would silently drop same-day rows (e.g. `published_at <= '2026-
 > Returns recalls across CPSC, FDA, USDA, NHTSA, and USCG, newest first
 > (`published_at DESC`), with keyset (seek) pagination — pass the `next_cursor` from the previous page
 > back as `cursor`. **Caveats carried from the data:** (1) `classification` is **source-native and not a
-> unified enum** — FDA/USDA use `Class I`/`Class II`/`Class III`, USCG uses `H`/`L`/`M`/`S`, and
+> unified enum** — FDA uses `1`/`2`/`3`/`NC`, USDA uses `Class I`/`Class II`/`Class III`/`Public Health Alert`, USCG uses `H`/`L`/`M`/`S`, and
 > CPSC/NHTSA have none; `?classification=` is an **exact-string equality** whose meaning depends on the
 > source you also filter by. (2) `is_active` is **tri-state**: CPSC and NHTSA recalls carry no lifecycle
 > status (`null`) and therefore match **neither** `is_active=true` nor `is_active=false`. (3) **Deep,
@@ -433,7 +433,7 @@ class Source(StrEnum):
 01):** `source` is a genuinely closed, conformed, cross-source domain of exactly 5 uppercase values
 (confirmed `accepted_values` on all three serving marts) — making it a `StrEnum` gives free 422
 validation on path/query and a clean OpenAPI enum. `classification`, `type`, and `risk_level` are
-**source-native and disjoint** (ADR 0036 D2/D3): `classification` holds FDA/USDA `Class I/II/III` *and*
+**source-native and disjoint** (ADR 0036 D2/D3): `classification` holds FDA `1/2/3/NC`, USDA `Class I/II/III`/`Public Health Alert` *and*
 USCG `H/L/M/S` in the same column, `risk_level` is USDA-only, `type` has five disjoint per-source
 domains. A global `StrEnum` over them would (a) be wrong (the value spaces don't conform) and (b) lie to
 clients about what a value means independent of source. They are therefore **free-string** fields and

@@ -246,7 +246,7 @@ For each field: gold `mart.column`; raw→gold lineage; true meaning + caveats; 
 - **PROPOSED:** *"Recall severity/hazard classification in the source's native vocabulary (FDA: numeric 1/2/3 and NC for Not Yet Classified; USDA: Class I/II/III, Public Health Alert; USCG: H/L/M/S). NOT normalized across sources. Sources: FDA, USDA, USCG (null for CPSC/NHTSA)."*
 - **Current:** `null`.
 - **Discrepancy: NONE on provenance/population.** Confidence **HIGH**, but the first pass's `confirmed` flag was set false because it **mis-stated the FDA vocabulary** (claimed Roman "Class I/II/III"; FDA actually emits `1/2/3/NC` — `stg_fda_recalls.sql:36`, `fda/field_audit_2026_w22.md:285,287,333`). The proposed string above is corrected. This is a content correction, not a discrepancy against existing docs.
-- **UNVERIFIED:** corpus-scale null/value distribution of the merged column not directly re-measured beyond the per-value counts above.
+- **UNVERIFIED → ✅ RESOLVED 2026-06-19 (data-side handover):** ~~corpus-scale null/value distribution of the merged column not directly re-measured beyond the per-value counts above~~ — independently measured against live prod: FDA `1/2/3/NC` = 7,523/34,165/8,902/12, USDA `Class I/II/III`/PHA = 824/188/43/163, USCG `H/L/M/S`/NULL = 641/636/25/2/377, CPSC/NHTSA NULL = 9,853/30,090; domain identical (counts drift ~2 days from the figures above), now warn-guarded by a dbt `accepted_values` test (see [data-side handover](data-side-provenance-handover-2026-06-19.md) §3).
 
 ---
 
@@ -258,7 +258,7 @@ For each field: gold `mart.column`; raw→gold lineage; true meaning + caveats; 
 - **PROPOSED:** *"USDA health-risk label derived 1:1 from the USDA classification (e.g. 'High - Class I', 'Low - Class II', 'Marginal - Class III', 'Public Health Alert'). Sources: USDA only (null for CPSC/FDA/NHTSA/USCG)."*
 - **Current:** `null` (Pydantic example `'Low - Class II'` matches a derived value; `str | None`).
 - **Discrepancy:** this is one of the **5 known carry-forward findings** (see §4 — the "risk_level" finding: USDA-only, derived not lifted). The provenance is now fully confirmed; the gap is documentation. Confidence **HIGH**.
-- **UNVERIFIED:** the 5-label USDA PDF taxonomy includes `Medium - Class I`, which the CASE does not emit — consistent with coverage (no such value present), but not re-verified against future corpus.
+- **UNVERIFIED → ✅ RESOLVED 2026-06-19 (data-side handover):** ~~the 5-label USDA PDF taxonomy includes `Medium - Class I`, which the CASE does not emit — not re-verified against future corpus~~ — independently confirmed live: only the **4** CASE values are present (`High - Class I` 824 / `Low - Class II` 188 / `Marginal - Class III` 43 / `Public Health Alert` 163), no `Medium - Class I`; now warn-guarded by a dbt `accepted_values` test (see [data-side handover](data-side-provenance-handover-2026-06-19.md) §3).
 
 ---
 
@@ -992,6 +992,7 @@ These carry an all-source `populated_by` that is **inferred from SQL structure (
 - **`firm_usda_attributes`** (§3.67) — array length >1 (multi-establishment firms) structurally possible but not data-confirmed; size-class distribution not in coverage; FSIS source-field exact wording from the supplied dict, PDF not re-opened.
 - **`firm_fda_attributes`** (§3.69) — CPSC "100% empty CompanyIDs" claim unchecked (raw CPSC dict not read; FDA-only conclusion is independent of it); `firm_state_cd` 2-letter semantics inferred (not in FDA PDF); multi-FDA-FEI cluster count not isolated.
 - **Raw-dictionary-sourced sub-field claims** — e.g. CPSC `Hazards` `HazardType/HazardTypeID` always empty (§3.20), CPSC `Products[].Model` empty-string (§3.27/3.35), USCG `'N/A'` HIN sentinel survival (§3.28/3.38). These are from raw dictionaries / sampled exploratory JSON, consistent with coverage, but not independently re-derivable from dbt SQL alone.
+- **Classification corpus distribution & `risk_level` 4-value domain (§3.10, §3.11)** — **✅ RESOLVED 2026-06-19** by the independent data-side audit (`data-side-provenance-handover-2026-06-19.md` §3): the live per-source classification distribution was measured and only the 4 `risk_level` CASE values confirmed (no `Medium - Class I`). Both are now warn-guarded by dbt `accepted_values` tests on the pipeline's nightly build.
 
 ---
 

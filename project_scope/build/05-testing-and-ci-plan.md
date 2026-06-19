@@ -200,7 +200,7 @@ the INSERT so the test and the seed agree byte-for-byte). `search_vector` is bui
 | # | Mart | Row identity | Edge it covers |
 |---|---|---|---|
 | R1 | recall_summary | CPSC `24-001`, `is_active=NULL` | **Tri-state**: excluded by `?is_active=true`, included unfiltered |
-| R2 | recall_summary | FDA `F-1001`, `is_active=true`, `classification='Class I'` | Active recall; classification source-native equality filter |
+| R2 | recall_summary | FDA `F-1001`, `is_active=true`, `classification='2'` | Active recall; classification source-native equality filter (FDA emits `2`, never `Class I`) |
 | R3 | recall_summary | USDA `065-2024`, `is_active=false`, `was_ever_retracted=true`, `is_currently_active=false` | **Retracted/inactive**; tri-state flags non-NULL |
 | R4 | recall_summary | FDA `F-1002`, `product_names/models/hins = NULL` | **NULL-array** row → API must coerce to `[]` |
 | R5 | recall_summary | NHTSA `25V-100`, `firms`=2-element jsonb, `firm_count=2` | **Multi-firm jsonb rollup**; `announced_at=NULL` ok |
@@ -218,14 +218,14 @@ the INSERT so the test and the seed agree byte-for-byte). `search_vector` is bui
 > guessed):
 
 ```sql
--- R2: active FDA recall, classification 'Class I'
+-- R2: active FDA recall, classification '2' (FDA source-native; FDA never emits Roman Class I)
 INSERT INTO mart_recall_summary
   (recall_event_id, source, source_recall_id, title, published_at, announced_at,
    classification, is_active, distribution_scope, firm_count, firms, product_count,
    product_names, edit_event_count, has_been_edited)
 VALUES
   (md5('FDA|F-1001'), 'FDA', 'F-1001', 'Acme Peanut Butter recall',
-   '2026-05-01T00:00:00Z', '2026-04-29T00:00:00Z', 'Class I', true, 'Nationwide',
+   '2026-05-01T00:00:00Z', '2026-04-29T00:00:00Z', '2', true, 'Nationwide',
    1, '[{"firm_id":"acmefoods","name":"Acme Foods","role":"establishment","match_confidence":"fei_exact"}]'::jsonb,
    1, '["Acme Peanut Butter 16oz"]'::jsonb, 0, false);
 
@@ -585,7 +585,7 @@ Group by endpoint; each assertion ties to a seed row from §2.2.
 |---|---|---|
 | `test_recalls_list_default_order` | all R* | 200; rows ordered `published_at DESC`; `is_active` is `true`/`false`/`null` preserved; null-array R4 returns `product_names: []` |
 | `test_recalls_filter_is_active_true_excludes_null` | R1, R2 | `?is_active=true` returns R2, **not** the CPSC `NULL` R1 (tri-state honesty) |
-| `test_recalls_filter_classification` | R2, R3 | `?classification=Class I` returns FDA/USDA Class-I rows; free-string equality |
+| `test_recalls_filter_classification` | R2, R3 | `?classification=2` returns the FDA R2 row and `?classification=Class I` the USDA R3 row (FDA emits `2`, not `Class I`); free-string source-native equality |
 | `test_recalls_keyset_paging_walks_set` | all R* | `?limit=2` → `has_next=true` + `next_cursor`; following the cursor yields the next page with **no overlap, no gap**; final page `has_next=false` |
 | `test_recalls_with_total_opt_in` | all R* | default response omits `total`; `?with_total=true` includes an accurate COUNT |
 | `test_recalls_bad_cursor_400` | — | `?cursor=garbage` → 400 envelope with `request_id`, not 500 (BadCursor=400, decision 5) |

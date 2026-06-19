@@ -56,7 +56,16 @@ class UscgManufacturer(BaseModel):
     state: str | None = None
     zip: str | None = None
     country: str | None = None
-    status: str | None = None
+    status: str | None = Field(
+        default=None,
+        description=(
+            "USCG boat-manufacturer directory operating status, passed through verbatim from the "
+            "scraped USCG directory. Observed warn-guarded live domain (per the data side's "
+            "accepted_values test as of 2026-06-19): 'In Business', 'Inactive', 'Federal or State "
+            "Agency'. Not enum-constrained, so a future upstream value still parses. Sources: USCG "
+            "only."
+        ),
+    )
     in_business: str | None = None
     out_of_business: str | None = None
     date_modified: str | None = None
