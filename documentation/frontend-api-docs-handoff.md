@@ -9,7 +9,7 @@ Two inputs drive the docs page. Neither should be replicated by hand on the site
 | Artifact | Location | What it provides |
 |---|---|---|
 | `openapi.json` | `/openapi.json` in this repo; live at `https://consumer-product-recalls-api.fly.dev/openapi.json` | Machine-readable endpoint contract: paths, params, response schemas, status codes, error envelopes. This is the single source of truth for every endpoint signature. |
-| `documentation/api-reference.md` | This repo | Prose layer: pagination behavior, error envelope conventions, honest caveats (tri-state `is_active`, source-native `classification`, recall-level UPCs, no fuzzy search), and task-framed examples. Do not restate caveats or examples from this file on the site — link to it or quote the relevant section. |
+| `documentation/api-reference.md` | This repo | Prose layer: pagination behavior, error envelope conventions, honest caveats (tri-state `is_active`, source-native `classification`, recall-level UPCs, no fuzzy search, the two `/stats` geography lenses + multi-counting, non-comparable units), and task-framed examples. Do not restate caveats or examples from this file on the site — link to it or quote the relevant section. |
 
 ---
 
@@ -118,6 +118,8 @@ The Starlight default theme adapts cleanly to dark/light. Match the website's co
 
 ### Keeping the Spec in Sync
 
+> **Surface additions (2026-06-19, `feature/stats-and-firm-recalls`):** the spec now carries a **`stats` tag group** — the `GET /stats/*` dashboard endpoints (overview, recalls-by-period, monthly-trend, by-classification, status, firm-leaderboard, by-geography, by-country, units) — and a new **`?firm_id=`** filter on `/recalls`. Both render automatically from `openapi.json` (no page-structure change needed); just add the `/stats` geography-lens / multi-counting / non-comparable-units caveats to the authored `/api/caveats/` page.
+
 - **On each API deploy:** the deploy pipeline (`deploy.yml`) runs after CI passes on `main`. Add a website repo dispatch or a scheduled build that re-fetches `openapi.json` from the live URL after the smoke check passes.
 - **On a `gold_meta.schema_version` bump:** the API's `documentation/api-reference.md` will be updated to reflect the change. Review the Caveats and Changelog pages and update the authored MDX accordingly.
 - **Never hand-edit endpoint tables on the site.** If a param is wrong in the rendered docs, the fix goes to `openapi.json` (or the source code that generates it) — not to the website repo.
@@ -129,7 +131,7 @@ The Starlight default theme adapts cleanly to dark/light. Match the website's co
 | Endpoint paths, methods, params, response schemas, status codes | `openapi.json` via starlight-openapi — rendered automatically |
 | Error envelope shape | `openapi.json` (every error response uses `ErrorEnvelope` schema) — rendered automatically |
 | Pagination mechanics (`next_cursor`, `limit`, `with_total`) | Authored MDX on `/api/pagination/`, sourced from [`api-reference.md`](api-reference.md) §Pagination |
-| Honest caveats (`is_active` tri-state, source-native classification, recall-level UPCs, no fuzzy search) | Authored MDX on `/api/caveats/`, sourced from [`api-reference.md`](api-reference.md) §Caveats |
+| Honest caveats (`is_active` tri-state, source-native classification, recall-level UPCs, no fuzzy search, the two `/stats` geography lenses + multi-counting, non-comparable units) | Authored MDX on `/api/caveats/`, sourced from [`api-reference.md`](api-reference.md) §Caveats |
 | Base URL, open-API note, CORS status (open `*` — see Authentication and CORS above) | Authored MDX on `/api/` overview page |
 | Changelog | Authored MDX on `/api/changelog/` — updated manually on breaking changes |
 

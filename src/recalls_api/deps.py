@@ -101,6 +101,7 @@ class RecallFilters:
     announced_after: date | None = None
     announced_before: date | None = None
     source_recall_id: str | None = None
+    firm_id: str | None = None
     # Geo array-overlap filters (GIN-backed upstream).
     distribution_state: list[str] | None = None
     distribution_country: list[str] | None = None
@@ -168,6 +169,15 @@ def recall_filters(
             description="EXACT agency-native id; unique only when combined with source.",
         ),
     ] = None,
+    firm_id: Annotated[
+        str | None,
+        Query(
+            pattern=r"^[0-9a-f]{32}$",
+            description="Canonical firm cluster id; returns recalls where this firm appears in ANY "
+            "role (incl. co-recalled/secondary firms), unlike `firm` (primary-name substring). "
+            "Obtain from RecallDetail.firms[].firm_id.",
+        ),
+    ] = None,
     distribution_state: Annotated[
         _CodeList,
         Query(
@@ -195,6 +205,7 @@ def recall_filters(
         announced_after=announced_after,
         announced_before=announced_before,
         source_recall_id=source_recall_id,
+        firm_id=firm_id,
         distribution_state=distribution_state,
         distribution_country=distribution_country,
     )

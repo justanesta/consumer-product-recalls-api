@@ -1,6 +1,8 @@
 # Plan — `/stats/*` read-through endpoints + `GET /recalls?firm_id=` filter
 
-**Date:** 2026-06-19 · **Status:** build-ready plan for a **new branch** (suggest `feat/stats-and-firm-recalls`), to be cut **after** `feature/api-audit` merges. Two independent features in one branch.
+**Date:** 2026-06-19 · **Status:** ✅ **IMPLEMENTED 2026-06-19** on `feature/stats-and-firm-recalls` (180 tests green; `openapi.json` regenerated; docs updated). Originally a build-ready plan for a new branch — two independent features in one branch.
+
+> **Confirm-before-build corrections (applied):** reading the `fct_*` SQL surfaced a few columns the plan had inferred — `fct_recalls_monthly_trend` has **two** rolling columns (`rolling_3mo_avg` + `rolling_12mo_avg`, not one); `fct_recall_status` outputs `source/status/event_count` only (**no** `is_active`); `fct_recalls_by_firm` carries `canonical_name` (+ `active_recalls`, `first/last_recall_at`), not a `firm_name`. The shipped models match the verified columns.
 
 **Why now / what's already done (no gold work blocks this):**
 - The **`fct_*` aggregate marts already exist** (`fct_recalls_by_month/_week/_year`, `_monthly_trend`, `_by_classification`, `_recall_status`, `_by_firm`, `_by_geography`, `_by_country`, `_units_recalled`) + `dim_date`, and the gold `grant_gold_readonly` post-hook **already grants `SELECT` on every gold object to `recalls_readonly`** — so the API's role can read them today. This is pure API-surface work.

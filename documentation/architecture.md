@@ -2,7 +2,7 @@ Purpose: describe the system shape of this API — what it is, what it sits on t
 
 # Architecture
 
-This is a read-only FastAPI service that exposes five consumer-product-recall data sources (CPSC, FDA, USDA, NHTSA, USCG) via a small set of keyset-paginated JSON endpoints. It **owns no schema and writes nothing**: the upstream pipeline materializes three gold dbt marts into Neon PostgreSQL, and this service reads them through a single `recalls_readonly` role. See [data_contract.md](data_contract.md) for the full API-side view of that read contract and [operations.md](operations.md) for the production runtime and runbook.
+This is a read-only FastAPI service that exposes five consumer-product-recall data sources (CPSC, FDA, USDA, NHTSA, USCG) via a small set of JSON endpoints (keyset-paginated entity lists plus bare-array `/stats/*` aggregates). It **owns no schema and writes nothing**: the upstream pipeline materializes three gold serving marts (plus the aggregate `fct_*` marts and `gold_meta`) into Neon PostgreSQL, and this service reads them through a single `recalls_readonly` role. See [data_contract.md](data_contract.md) for the full API-side view of that read contract and [operations.md](operations.md) for the production runtime and runbook.
 
 ---
 
@@ -54,10 +54,10 @@ sequenceDiagram
 |---|---|---|
 | `main` | `src/recalls_api/main.py` | `create_app()` factory: registers middleware (inner-first; `CORSMiddleware` outermost), error handlers, routers, lifespan (pool open/close, fail-loud settings validation at boot) |
 | `settings` | `src/recalls_api/settings.py` | `pydantic-settings` `Settings`; `get_settings()` is `lru_cache(maxsize=1)` — constructed once at boot; missing `NEON_DATABASE_URL_RO` raises `ValidationError` immediately |
-| `routers` | `src/recalls_api/routers/` | Four FastAPI routers (`health`, `recalls`, `products`, `firms`); own no SQL; call query builders + pagination helpers; declare `responses=` error maps |
+| `routers` | `src/recalls_api/routers/` | Five FastAPI routers (`health`, `recalls`, `products`, `firms`, `stats`); own no SQL; call query builders + pagination helpers; declare `responses=` error maps |
 | `deps` | `src/recalls_api/deps.py` | `RecallFilters` and `PaginationParams` as FastAPI `Depends` dataclasses; `get_conn` dependency that yields one `AsyncConnection` per request from the pool |
-| `queries` | `src/recalls_api/queries/` | Pure `Select`-building functions (`recalls.py`, `products.py`, `firms.py`); stateless; never hold a connection; reference mart tables as lightweight SQLAlchemy Core literals |
-| `models` | `src/recalls_api/models/` | Pydantic v2 response models (`common.py`, `recalls.py`, `products.py`, `firms.py`); `Source` and `DistributionScope` enums; `Page[T]` envelope |
+| `queries` | `src/recalls_api/queries/` | Pure `Select`-building functions (`recalls.py`, `products.py`, `firms.py`, `stats.py`); stateless; never hold a connection; reference mart + `fct_*` tables as lightweight SQLAlchemy Core literals |
+| `models` | `src/recalls_api/models/` | Pydantic v2 response models (`common.py`, `recalls.py`, `products.py`, `firms.py`, `stats.py`); `Source`/`DistributionScope` + the `/stats` enums (`StatsSource`/`Grain`/`GeographyBasis`); `Page[T]` envelope |
 | `pagination` | `src/recalls_api/pagination.py` | `Cursor` (frozen dataclass): base64url JSON encode/decode; raises `BadCursor` (HTTP 400) on tamper or wrong arity; `published_at_keyset_where()` and `rank_keyset_where()` seek-WHERE builders; `slice_page()` (limit+1 pattern) |
 | `db` | `src/recalls_api/db.py` | `make_engine()` (asyncpg pool, pool_size=5, max_overflow=5, pool_recycle=300 s, connect_timeout=5 s, command_timeout=10 s, `default_transaction_read_only=on` session setting, UTC timezone); `open_pool()` lifespan boot check (`SHOW transaction_read_only`); `healthcheck()` (`SELECT 1`); `get_conn()` dependency |
 | `errors` | `src/recalls_api/errors.py` | `ApiError` hierarchy (5 subtypes); `ErrorEnvelope` wire shape; `LIST_ERRORS` / `ITEM_ERRORS` prebuilt `responses=` dicts; `register_error_handlers()` wires 7 handlers onto the app (ApiError, RequestValidationError, four DB-exception types, and the catch-all) |

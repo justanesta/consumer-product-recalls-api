@@ -270,3 +270,118 @@ insert into mart_firm_profile (
  '[{"establishment_id": "M99999", "establishment_name": "MULTICORP PLANT", "state": "TX"}]',
  null,
  '[{"firm_fei_num": 2000000002, "firm_legal_nam": "MULTICORP LLC", "firm_city_nam": "Austin", "firm_state_cd": "TX"}]');
+
+-- ---------------------------------------------------------------------------------------------------
+-- gold_meta + fct_* aggregate marts — backing the /stats/* read-through endpoints. In production
+-- these are dbt views over recall_event / mart_firm_profile; the seed mirrors only their final
+-- SERVING columns (not the dbt aggregation logic), with a few deterministic rows tied to the recalls
+-- above. The 'ALL' rows are the GROUPING SETS all-source rollup (not double-counting).
+-- ---------------------------------------------------------------------------------------------------
+
+drop table if exists gold_meta;
+create table gold_meta (rebuilt_at timestamptz not null, schema_version text not null);
+insert into gold_meta (rebuilt_at, schema_version) values ('2026-06-19 03:00:00+00', '1');
+
+drop table if exists fct_recalls_by_month;
+create table fct_recalls_by_month (period date not null, source text not null, event_count bigint not null);
+insert into fct_recalls_by_month (period, source, event_count) values
+ ('2026-05-01', 'FDA', 2), ('2026-06-01', 'CPSC', 1), ('2026-04-01', 'USDA', 1),
+ ('2026-03-01', 'NHTSA', 1), ('2026-02-01', 'USCG', 1),
+ ('2026-05-01', 'ALL', 2), ('2026-06-01', 'ALL', 1), ('2026-04-01', 'ALL', 1),
+ ('2026-03-01', 'ALL', 1), ('2026-02-01', 'ALL', 1);
+
+drop table if exists fct_recalls_by_week;
+create table fct_recalls_by_week (period date not null, source text not null, event_count bigint not null);
+insert into fct_recalls_by_week (period, source, event_count) values
+ ('2026-05-04', 'FDA', 1), ('2026-05-11', 'FDA', 1), ('2026-05-04', 'ALL', 1), ('2026-05-11', 'ALL', 1);
+
+drop table if exists fct_recalls_by_year;
+create table fct_recalls_by_year (period date not null, source text not null, event_count bigint not null);
+insert into fct_recalls_by_year (period, source, event_count) values
+ ('2026-01-01', 'FDA', 2), ('2026-01-01', 'CPSC', 1), ('2026-01-01', 'ALL', 6);
+
+drop table if exists fct_recalls_monthly_trend;
+create table fct_recalls_monthly_trend (
+    month                date    not null,
+    source               text    not null,
+    event_count          bigint  not null,
+    rolling_3mo_avg      numeric,
+    rolling_12mo_avg     numeric,
+    event_count_year_ago bigint,
+    yoy_pct_change       numeric
+);
+insert into fct_recalls_monthly_trend
+    (month, source, event_count, rolling_3mo_avg, rolling_12mo_avg, event_count_year_ago, yoy_pct_change)
+values
+ ('2026-05-01', 'FDA', 2, 1.5, 0.5, null, null),
+ ('2026-06-01', 'CPSC', 1, 1.0, 0.3, null, null);
+
+drop table if exists fct_recalls_by_classification;
+create table fct_recalls_by_classification (
+    source text not null, classification text, risk_level text, event_count bigint not null
+);
+insert into fct_recalls_by_classification (source, classification, risk_level, event_count) values
+ ('FDA', '2', null, 1), ('FDA', '3', null, 1), ('USDA', 'Class II', 'Low - Class II', 1),
+ ('USCG', 'H', null, 1), ('CPSC', null, null, 1), ('NHTSA', null, null, 1),
+ ('ALL', '2', null, 1), ('ALL', 'Class II', 'Low - Class II', 1);
+
+drop table if exists fct_recall_status;
+create table fct_recall_status (source text not null, status text not null, event_count bigint not null);
+insert into fct_recall_status (source, status, event_count) values
+ ('FDA', 'active', 1), ('FDA', 'inactive', 1), ('USDA', 'inactive', 1),
+ ('USCG', 'active', 1), ('CPSC', 'unknown', 1), ('NHTSA', 'unknown', 1),
+ ('ALL', 'active', 2), ('ALL', 'inactive', 2), ('ALL', 'unknown', 2);
+
+drop table if exists fct_recalls_by_firm;
+create table fct_recalls_by_firm (
+    firm_id          text   not null,
+    canonical_name   text   not null,
+    event_count      bigint not null,
+    active_recalls   bigint not null,
+    product_count    bigint not null,
+    first_recall_at  timestamptz,
+    last_recall_at   timestamptz,
+    event_count_rank bigint not null
+);
+insert into fct_recalls_by_firm
+    (firm_id, canonical_name, event_count, active_recalls, product_count,
+     first_recall_at, last_recall_at, event_count_rank)
+values
+ ('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'Acme Foods Inc', 2, 1, 3,
+  '2026-05-10 12:00:00+00', '2026-05-12 09:00:00+00', 1),
+ ('44444444444444444444444444444444', 'Honda Motor Co', 1, 0, 2,
+  '2026-03-20 07:00:00+00', '2026-03-20 07:00:00+00', 2),
+ ('11111111111111111111111111111111', 'Globex Corporation', 1, 0, 1,
+  '2026-06-01 10:00:00+00', '2026-06-01 10:00:00+00', 2);
+
+drop table if exists fct_recalls_by_geography;
+create table fct_recalls_by_geography (
+    geography_basis text not null, source text not null, state_code text not null, recall_count bigint not null
+);
+insert into fct_recalls_by_geography (geography_basis, source, state_code, recall_count) values
+ ('distribution', 'USDA', 'CA', 1), ('distribution', 'USDA', 'OR', 1), ('distribution', 'USDA', 'WA', 1),
+ ('distribution', 'ALL', 'CA', 1), ('distribution', 'ALL', 'OR', 1), ('distribution', 'ALL', 'WA', 1),
+ ('firm_registration', 'FDA', 'IL', 1), ('firm_registration', 'ALL', 'IL', 1);
+
+drop table if exists fct_recalls_by_country;
+create table fct_recalls_by_country (source text not null, country_code text not null, recall_count bigint not null);
+insert into fct_recalls_by_country (source, country_code, recall_count) values
+ ('USDA', 'MX', 1), ('USDA', 'GB', 1), ('FDA', 'US', 2),
+ ('ALL', 'US', 2), ('ALL', 'MX', 1), ('ALL', 'GB', 1);
+
+drop table if exists fct_units_recalled;
+create table fct_units_recalled (
+    source             text    not null,
+    unit_category      text    not null,
+    period             date    not null,
+    recalls_with_units bigint  not null,
+    total_units        numeric not null,
+    avg_units_per_recall numeric not null,
+    max_units          numeric not null
+);
+insert into fct_units_recalled
+    (source, unit_category, period, recalls_with_units, total_units, avg_units_per_recall, max_units)
+values
+ ('NHTSA', 'count', '2026-03-01', 1, 5000, 5000, 5000),
+ ('USCG', 'count', '2026-02-01', 1, 1, 1, 1),
+ ('FDA', 'weight', '2026-05-01', 1, 1200, 1200, 1200);
