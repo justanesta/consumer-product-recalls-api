@@ -91,24 +91,133 @@ class FirmProfile(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
-    firm_id: str
-    canonical_name: str = Field(examples=["Acme Foods Inc"])
-    normalized_name: str
-    observed_names: list[str] = Field(default_factory=list)
-    observed_company_ids: list[str] = Field(default_factory=list)
-    alternate_names: list[str] = Field(default_factory=list)
-    total_recalls: int = 0
-    active_recalls: int = 0
-    first_recall_at: datetime | None = None
-    last_recall_at: datetime | None = None
-    roles: list[str] = Field(default_factory=list)
-    recalls_by_source: dict[str, int] = Field(
-        default_factory=dict, examples=[{"FDA": 2, "USDA": 1}]
+    firm_id: str = Field(
+        description=(
+            "Synthetic primary key of the canonical firm (a cross-source cluster). Derived from "
+            "the firm-resolution crosswalk, falling back to md5(normalized name). One row per "
+            "canonical firm across all agencies. Sources: derived (all five contribute names)."
+        )
     )
-    distinct_products: int = 0
-    firm_usda_attributes: list[UsdaEstablishment] = Field(default_factory=list)  # USDA
-    firm_uscg_attributes: list[UscgManufacturer] = Field(default_factory=list)  # USCG
-    firm_fda_attributes: list[FdaAttributes] = Field(default_factory=list)  # FDA
+    canonical_name: str = Field(
+        examples=["Acme Foods Inc"],
+        description=(
+            "Human-readable display name of the canonical firm — the cluster's resolved name, or "
+            "the representative raw firm name when unclustered. Not an authoritative legal name. "
+            "Sources: all five."
+        ),
+    )
+    normalized_name: str = Field(
+        description=(
+            "Upper-cased, whitespace-trimmed form of the firm's representative name for "
+            "case-insensitive lookup. NOT a unique key (firm_id is the key). Sources: all five."
+        )
+    )
+    observed_names: list[str] = Field(
+        default_factory=list,
+        description=(
+            "JSONB array of all distinct raw firm-name surface forms (across sources and "
+            "spellings) that map to this canonical firm — the provenance/audit trail of names "
+            "collapsed together. Always >=1 element. Sources: all five."
+        ),
+    )
+    observed_company_ids: list[str] = Field(
+        default_factory=list,
+        description=(
+            "JSONB array of distinct structured firm identifiers observed for this firm: FDA FEI "
+            "numbers, USDA FSIS establishment numbers, and USCG MICs. Also the join key to the "
+            "three sidecars. Sources: FDA, USDA, USCG (empty for firms seen only via CPSC/NHTSA, "
+            "which carry no usable firm id)."
+        ),
+    )
+    alternate_names: list[str] = Field(
+        default_factory=list,
+        description=(
+            "JSONB array of brand/DBA surface-form aliases (e.g. 'John Deere' for 'Deere & Company "
+            "(John Deere)'), derived by the firm-resolution step for search and fuzzy matching. "
+            "Empty when the firm has no aliases. Sources: derived (not a per-agency field)."
+        ),
+    )
+    total_recalls: int = Field(
+        default=0,
+        description=(
+            "Total distinct recalls this firm is linked to, across all sources it appears in (a "
+            "firm in multiple roles on one recall counts once). Always present. Sources: all five."
+        ),
+    )
+    active_recalls: int = Field(
+        default=0,
+        description=(
+            "Count of this firm's distinct currently-active recalls. Only FDA, USDA, and USCG "
+            "recalls can be active; CPSC and NHTSA have no lifecycle (is_active null) and never "
+            "count. Always present (0 if none). Sources counted: FDA, USDA, USCG."
+        ),
+    )
+    first_recall_at: datetime | None = Field(
+        default=None,
+        description=(
+            "Earliest recall publication timestamp for this firm (min of published_at — a "
+            "per-source 'last published / record-created' date, not a uniform announcement date). "
+            "Null only for a firm with no linked recall. Sources: all five."
+        ),
+    )
+    last_recall_at: datetime | None = Field(
+        default=None,
+        description=(
+            "Most recent recall publication timestamp for this firm (max of published_at; same "
+            "per-source caveat as first_recall_at). Null only for a firm with no linked recall. "
+            "Sources: all five."
+        ),
+    )
+    roles: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Distinct roles this firm has played across its recalls: manufacturer, importer, "
+            "distributor (CPSC), establishment (FDA/USDA), filer/manufacturer (NHTSA), "
+            "manufacturer (USCG). Sources: all five."
+        ),
+    )
+    recalls_by_source: dict[str, int] = Field(
+        default_factory=dict,
+        examples=[{"FDA": 2, "USDA": 1}],
+        description=(
+            "JSONB object mapping source -> distinct recall count for this firm (e.g. {'NHTSA': "
+            "12, 'CPSC': 3}). Only sources where the firm has >=1 recall appear as keys, and the "
+            "values sum to total_recalls. Sources: all five."
+        ),
+    )
+    distinct_products: int = Field(
+        default=0,
+        description=(
+            "Total distinct recalled-product rows across all recalls this firm is associated with, "
+            "in any role (a per-firm footprint, NOT a global distinct — a product on a multi-firm "
+            "recall is counted under each firm). Never null. Sources: all five."
+        ),
+    )
+    firm_usda_attributes: list[UsdaEstablishment] = Field(
+        default_factory=list,
+        description=(
+            "USDA FSIS establishment attributes — a JSON array of one block per matched FSIS "
+            "establishment number (name, address, regulatory metadata, grant dates). Empty for "
+            "non-USDA firms. Sources: USDA only."
+        ),
+    )
+    firm_uscg_attributes: list[UscgManufacturer] = Field(
+        default_factory=list,
+        description=(
+            "USCG boat-manufacturer directory attributes — a JSON array of one block per USCG "
+            "Manufacturer Identification Code (MIC) the firm is registered under (company name, "
+            "address, status, succession lineage, MIC-recycle flags). Empty for non-USCG firms. "
+            "Sources: USCG only."
+        ),
+    )
+    firm_fda_attributes: list[FdaAttributes] = Field(
+        default_factory=list,
+        description=(
+            "FDA establishment attributes — a JSON array of one block per FDA FEI the firm "
+            "clusters under (legal name, address at time of recall, firm-succession signal). Empty "
+            "for non-FDA firms. Sources: FDA only."
+        ),
+    )
 
     @field_validator(
         "observed_names",

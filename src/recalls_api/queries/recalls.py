@@ -47,14 +47,12 @@ recall_summary = sa.table(
     sa.column("product_names", sa.JSON),
     sa.column("models", sa.JSON),
     sa.column("hins", sa.JSON),
-    sa.column("first_seen_at", sa.TIMESTAMP(timezone=True)),
-    sa.column("last_seen_at", sa.TIMESTAMP(timezone=True)),
-    sa.column("edit_count", sa.Integer),
-    sa.column("is_currently_active", sa.Boolean),
-    sa.column("was_ever_retracted", sa.Boolean),
-    sa.column("edit_event_count", sa.BigInteger),
     sa.column("has_been_edited", sa.Boolean),
 )
+# Pipeline-observability columns the mart still carries but the API no longer projects (audit Q2 /
+# provenance prune): first_seen_at, last_seen_at, edit_count, edit_event_count, is_currently_active,
+# was_ever_retracted. They implied authoritative agency semantics they lack and were source-partial;
+# has_been_edited is kept as the one honest "revised since first ingest" signal.
 
 # List projection — the small subset (plan §3). Detail selects the full row (recall_summary).
 _LIST_COLS = (
@@ -74,7 +72,6 @@ _LIST_COLS = (
     recall_summary.c.primary_firm_name,
     recall_summary.c.firm_count,
     recall_summary.c.product_count,
-    recall_summary.c.edit_event_count,
     recall_summary.c.has_been_edited,
 )
 

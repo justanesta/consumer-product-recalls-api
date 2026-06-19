@@ -30,7 +30,8 @@ product_search = sa.table(
     sa.column("type", sa.Text),
     sa.column("model_year", sa.Text),  # FLAGGED int|text (01) — read permissively
     sa.column("hin", sa.Text),
-    sa.column("upc", sa.Text),  # ALL-NULL today — never filtered
+    # NB: the mart also has an all-NULL per-product `upc` column; the API no longer projects it
+    # (audit A9 — see recall_product_upcs for the recall-level UPC-search path).
     sa.column("recall_title", sa.Text),
     sa.column("classification", sa.Text),
     sa.column("risk_level", sa.Text),
@@ -53,7 +54,6 @@ _HIT_COLS = (
     product_search.c.type,
     product_search.c.model_year,
     product_search.c.hin,
-    product_search.c.upc,
     product_search.c.recall_title,
     product_search.c.classification,
     product_search.c.risk_level,

@@ -33,7 +33,7 @@ async def test_upc_recall_level_containment(client: AsyncClient) -> None:
     hit = body["items"][0]
     assert {h["recall_product_id"] for h in body["items"]} == {"rp-001"}
     assert hit["upc_is_recall_level"] is True
-    assert hit["upc"] is None  # the per-product upc column is all-null
+    assert "upc" not in hit  # the all-null per-product upc column is no longer projected (audit A9)
 
 
 async def test_upc_miss_is_empty_not_error(client: AsyncClient) -> None:

@@ -312,7 +312,21 @@ async def test_detail_multi_firm_rollup(client: AsyncClient) -> None:
     assert d["firm_count"] == 2
     assert {f["name"] for f in d["firms"]} == {"Tyson Foods", "Cold Storage Co"}
     assert d["distribution_state_codes"] == ["CA", "OR", "WA"]
-    assert d["was_ever_retracted"] is True
+
+
+async def test_detail_omits_pruned_observability_fields(client: AsyncClient) -> None:
+    # Audit Q2 / provenance prune: these pipeline-observability fields are no longer projected.
+    d = (await client.get("/recalls/usda/U-2002")).json()
+    for pruned in (
+        "edit_event_count",
+        "edit_count",
+        "first_seen_at",
+        "last_seen_at",
+        "is_currently_active",
+        "was_ever_retracted",
+    ):
+        assert pruned not in d
+    assert "has_been_edited" in d  # the one kept "revised" signal
 
 
 async def test_detail_missing_returns_404(client: AsyncClient) -> None:

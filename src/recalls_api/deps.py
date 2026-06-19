@@ -129,7 +129,12 @@ def recall_filters(
     ] = None,
     firm: Annotated[
         str | None,
-        Query(min_length=2, max_length=200, description="Case-insensitive substring (unindexed)."),
+        Query(
+            min_length=2,
+            max_length=200,
+            description="Case-insensitive substring on the recall's PRIMARY firm name only (not "
+            "secondary/co-recalled firms); unindexed.",
+        ),
     ] = None,
     distribution_scope: Annotated[
         _ScopeList,

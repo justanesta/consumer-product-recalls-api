@@ -62,12 +62,24 @@ class FirmRef(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
-    firm_id: str = Field(examples=["7d2c1e5b8a40f0a9f4c7e3a1e3a1c6f2"])
-    name: str = Field(examples=["Acme Corporation"])
+    firm_id: str = Field(
+        examples=["7d2c1e5b8a40f0a9f4c7e3a1e3a1c6f2"],
+        description="Canonical firm cluster id; use with GET /firms/{firm_id}.",
+    )
+    name: str = Field(examples=["Acme Corporation"], description="Canonical (cleaned) firm name.")
     # role / match_confidence are closed UPSTREAM but surfaced as free strings: the API does not let
     # clients filter on them and must not break if the pipeline adds a value.
-    role: str = Field(examples=["manufacturer"])
-    match_confidence: str = Field(examples=["exact_name"])
+    role: str = Field(
+        examples=["manufacturer"],
+        description=(
+            "Role this firm played on the recall (manufacturer/importer/distributor for CPSC, "
+            "establishment for FDA/USDA, filer/manufacturer for NHTSA, manufacturer for USCG)."
+        ),
+    )
+    match_confidence: str = Field(
+        examples=["exact_name"],
+        description="Firm-resolution path/quality for this link (e.g. exact_name, fei_exact).",
+    )
 
 
 class Health(BaseModel):
