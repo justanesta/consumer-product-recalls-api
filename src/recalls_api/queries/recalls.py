@@ -11,6 +11,7 @@ from datetime import timedelta
 
 import sqlalchemy as sa
 from sqlalchemy import Select
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.sql.elements import ColumnElement
 
 from recalls_api.deps import RecallFilters
@@ -117,6 +118,13 @@ def recalls_predicates(filters: RecallFilters) -> list[ColumnElement[bool]]:
         )
     if filters.firm is not None:  # substring; unindexed (02) — accept seq cost
         conds.append(c.primary_firm_name.ilike(sa.bindparam("firm", f"%{filters.firm}%")))
+    if filters.firm_id is not None:  # jsonb containment over the firms rollup; matches ANY role
+        # mart_recall_summary.firms is the firm<->recall edge; gold GIN-indexes it for `@>`.
+        conds.append(
+            sa.cast(c.firms, JSONB).op("@>")(
+                sa.bindparam("firm_id_arr", [{"firm_id": filters.firm_id}], type_=JSONB)
+            )
+        )
     if filters.distribution_scope:  # NOT NULL 4-value enum; any-of (OR)
         conds.append(
             c.distribution_scope.in_(

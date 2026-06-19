@@ -8,6 +8,7 @@ Purpose: Exhaustive endpoint-by-endpoint reference for the Consumer Product Reca
 - [GET /recalls/{source}/{recall\_id}](#get-recallssourcerecall_id)
 - [GET /products/search](#get-productssearch)
 - [GET /firms/{firm\_id}](#get-firmsfirm_id)
+- [GET /stats/\*](#get-stats)
 - [GET /health](#get-health)
 - [GET /health/db](#get-healthdb)
 
@@ -127,6 +128,7 @@ single-value.)
 | `distribution_country` | string (**multi**) | — | exactly 2 chars each, ISO alpha-2 | Recalls distributed to **any** of these countries (array overlap). **Foreign distribution only** — `US` is excluded by design (US distribution is captured by `distribution_scope` + `distribution_state`). GIN-backed. FDA/USDA only. See [data_contract.md](data_contract.md). |
 | `source_recall_id` | string | — | `min_length=1`, `max_length=128` | Exact match on the agency-native recall id. Unique only when combined with `source`; use the detail route for a guaranteed single result. |
 | `firm` | string | — | `min_length=2`, `max_length=200` | Case-insensitive substring match on `primary_firm_name`. Unindexed — avoid on very large result sets without a leading `source` filter. |
+| `firm_id` | string | — | pattern `^[0-9a-f]{32}$` | Canonical firm cluster id. Returns recalls where the firm appears in **any** role (incl. co-recalled/secondary) via jsonb containment on the `firms` rollup — more complete than `firm` (primary-name substring only). GIN-backed upstream. Obtain from `RecallDetail.firms[].firm_id`. |
 | `published_after` | date (`YYYY-MM-DD`) | — | — | Inclusive start of the calendar day. |
 | `published_before` | date (`YYYY-MM-DD`) | — | — | Inclusive of the entire `published_before` day. |
 | `announced_after` | date (`YYYY-MM-DD`) | — | — | `announced_at >= start of day (UTC)`. Rows with a null `announced_at` are excluded. |
@@ -494,6 +496,35 @@ curl "https://consumer-product-recalls-api.fly.dev/firms/<firm_id from step 1>"
 - **The `firm_id` is opaque.** Do not attempt to construct one; always obtain it from `RecallDetail.firms[].firm_id`. The 32-hex pattern guard is a shape check only — a syntactically valid but unknown id returns 404.
 - **A firm appearing under multiple agencies collapses to one row.** `recalls_by_source` breaks down the count per agency.
 - **`first_recall_at` and `last_recall_at` are `null` if the firm has no matched recalls in the gold mart** (can occur for newly ingested firms not yet linked to a recall event).
+
+---
+
+## GET /stats/\*
+
+Aggregate **read-through** endpoints over the gold `fct_*` marts — for the dashboards / landing charts. These are small pre-aggregates, so each returns a **bare JSON array** (no pagination, no cursor; `/stats/overview` returns a single object). All are cacheable (`Cache-Control: public, max-age=300`) — ideal for a build-time pull.
+
+**Common `source` filter.** Most endpoints accept an optional `source` — one of `CPSC`, `FDA`, `USDA`, `NHTSA`, `USCG`, or **`ALL`** (the synthesized all-source GROUPING-SETS rollup, *not* double-counting). Omit it for every row. Per-endpoint population differs (noted below); a source absent from a fact returns `[]`.
+
+**Status codes:** 422 `invalid_parameter` (bad `grain`/`basis`/`source` enum), 429 `rate_limited`, 503 `upstream_unavailable`.
+
+| Endpoint | Returns | Notes |
+|---|---|---|
+| `GET /stats/overview` | `StatsOverview` (object) | KPIs: `total_recalls`, `distinct_firms`, `sources`, `last_rebuilt_at` (from `gold_meta`). |
+| `GET /stats/recalls-by-period?grain=&source=` | `PeriodCount[]` | `grain` = `month` (default) / `week` / `year`. `{period, source, event_count}`. |
+| `GET /stats/monthly-trend?source=` | `MonthlyTrendPoint[]` | Per-source trend + rolling 3/12-month averages + YoY. **No `ALL`** on this fact. |
+| `GET /stats/by-classification?source=` | `ClassificationCount[]` | Source-native `classification` + `risk_level`. FDA = `1/2/3/NC` (not `Class I/II/III`); **not cross-source comparable**. |
+| `GET /stats/status?source=` | `StatusCount[]` | `active` / `inactive` / `unknown` (CPSC/NHTSA are `unknown`). |
+| `GET /stats/firm-leaderboard?limit=` | `FirmLeaderRow[]` | Most-recalled firms, ranked. `limit` 1–100 (default 20). No `source` (firm-grain). |
+| `GET /stats/by-geography?basis=&source=` | `GeographyCount[]` | `basis` = `distribution` (default) / `firm_registration` — **different questions, not a toggle**. Per-state counts **sum to more than the total** (a recall counts in every state it touches). |
+| `GET /stats/by-country?source=` | `CountryCount[]` | FDA/USDA (+ `ALL`). Multi-valued like geography. |
+| `GET /stats/units?source=` | `UnitsRow[]` | Units per source × `unit_category` × month. **No `ALL`** and **NOT cross-source comparable** (the measure differs per source); never sum across `unit_category`. |
+
+### Caveats
+
+- **`classification` is source-native** (as on `/recalls`): FDA `1/2/3/NC`, USDA `Class I/II/III` + `Public Health Alert`, USCG `H/L/M/S`, CPSC/NHTSA null. Legends must be scoped per source — there is no unified scale.
+- **The two geography lenses are different questions.** `distribution` = where the product went (FDA/USDA); `firm_registration` = where the firm is registered (USDA/USCG/FDA). Render as two captioned charts, never one toggle.
+- **Geography / country counts are multi-valued** — per-state / per-country counts sum to more than the distinct-recall total (an "industry-footprint" reading).
+- **Units are not cross-source comparable** and have no `ALL` rollup; `unit_category` keeps incommensurable units apart (never sum across categories or sources). Root causes: [data_contract.md](data_contract.md).
 
 ---
 

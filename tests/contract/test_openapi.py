@@ -20,12 +20,28 @@ def test_openapi_documents_the_v1_surface() -> None:
         "/recalls/{source}/{recall_id}",
         "/products/search",
         "/firms/{firm_id}",
+        "/stats/overview",
+        "/stats/recalls-by-period",
+        "/stats/by-classification",
+        "/stats/firm-leaderboard",
+        "/stats/by-geography",
         "/health",
         "/health/db",
     ):
         assert p in paths, f"missing path {p}"
     schemas = spec["components"]["schemas"]
-    for s in ("FirmProfile", "RecallSummary", "RecallDetail", "ProductSearchHit", "ErrorEnvelope"):
+    for s in (
+        "FirmProfile",
+        "RecallSummary",
+        "RecallDetail",
+        "ProductSearchHit",
+        "ErrorEnvelope",
+        "StatsOverview",
+        "PeriodCount",
+        "ClassificationCount",
+        "FirmLeaderRow",
+        "GeographyCount",
+    ):
         assert s in schemas, f"missing schema {s}"
     # the uniform error envelope is wired into the OpenAPI responses
     assert "400" in paths["/recalls"]["get"]["responses"]

@@ -68,6 +68,13 @@ def test_list_stmt_limit_is_plus_one() -> None:
     assert 26 in c.params.values()  # limit + 1 for has_next
 
 
+def test_list_stmt_firm_id_emits_jsonb_containment() -> None:
+    f = RecallFilters(None, None, None, None, None, None, firm_id="a" * 32)
+    c = _compiled(q.list_stmt(f, None, 25))
+    assert "@>" in str(c)  # jsonb containment over the firms rollup
+    assert c.params["firm_id_arr"] == [{"firm_id": "a" * 32}]
+
+
 def test_published_before_is_exclusive_next_day() -> None:
     c = _compiled(
         q.list_stmt(RecallFilters(None, None, None, None, date(2026, 5, 1), None), None, 25)

@@ -10,11 +10,12 @@ gold, this reads it.
 
 | Method | Path | Purpose |
 |---|---|---|
-| `GET` | `/recalls` | List + filter recalls (keyset pagination) |
+| `GET` | `/recalls` | List + filter recalls (keyset pagination); incl. `?firm_id=` (a firm's recalls, any role) |
 | `GET` | `/recalls/{source}/{recall_id}` | One recall (full detail) |
 | `GET` | `/recalls/search` | Recall-grain keyword full-text search (ts_rank_cd), same filters as /recalls |
 | `GET` | `/products/search` | "Is my product recalled?" — keyword FTS + exact `hin`/`model`, recall-level UPC |
 | `GET` | `/firms/{id}` | One canonical firm profile |
+| `GET` | `/stats/*` | Aggregate dashboard data over the gold `fct_*` marts (overview, by-period/classification/status/geography/country, monthly-trend, firm-leaderboard, units) |
 | `GET` | `/health`, `/health/db` | Liveness / readiness |
 | `GET` | `/openapi.json`, `/docs`, `/redoc` | Auto-generated spec + UIs |
 

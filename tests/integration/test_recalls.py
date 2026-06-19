@@ -71,6 +71,31 @@ async def test_filter_by_classification(client: AsyncClient) -> None:
     assert ids == {"F-1001"}
 
 
+async def test_filter_by_firm_id(client: AsyncClient) -> None:
+    acme = "a" * 32  # Acme Foods Inc — on F-1001 + F-1006
+    r = await client.get("/recalls", params={"firm_id": acme, "limit": 100})
+    assert {it["source_recall_id"] for it in r.json()["items"]} == {"F-1001", "F-1006"}
+
+
+async def test_firm_id_matches_secondary_co_recalled_firm(client: AsyncClient) -> None:
+    # Cold Storage Co is the DISTRIBUTOR (secondary) on U-2002 — primary_firm_name is "Tyson Foods",
+    # so a `firm=` substring would miss it; the firm_id containment matches it in ANY role.
+    cold_storage = "3" * 32
+    r = await client.get("/recalls", params={"firm_id": cold_storage, "limit": 100})
+    assert {it["source_recall_id"] for it in r.json()["items"]} == {"U-2002"}
+
+
+async def test_firm_id_ands_with_source(client: AsyncClient) -> None:
+    acme = "a" * 32
+    r = await client.get("/recalls", params={"firm_id": acme, "source": "USDA", "limit": 100})
+    assert r.json()["items"] == []  # Acme has no USDA recalls -> AND yields nothing
+
+
+async def test_firm_id_malformed_is_422(client: AsyncClient) -> None:
+    r = await client.get("/recalls", params={"firm_id": "not-a-valid-firm-id"})
+    assert r.status_code == 422
+
+
 async def test_firm_substring_is_case_insensitive(client: AsyncClient) -> None:
     r = await client.get("/recalls", params={"firm": "acme", "limit": 100})
     ids = {it["source_recall_id"] for it in r.json()["items"]}

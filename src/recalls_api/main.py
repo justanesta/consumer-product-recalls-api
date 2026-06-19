@@ -25,7 +25,7 @@ from recalls_api import __version__, db
 from recalls_api.errors import rate_limited_response, register_error_handlers
 from recalls_api.logging import RequestIdMiddleware, configure_logging
 from recalls_api.middleware import CacheControlMiddleware
-from recalls_api.routers import firms, health, products, recalls
+from recalls_api.routers import firms, health, products, recalls, stats
 from recalls_api.settings import get_settings
 
 _DESCRIPTION = (
@@ -110,6 +110,7 @@ def create_app() -> FastAPI:
     app.include_router(recalls.router)
     app.include_router(products.router)
     app.include_router(firms.router)
+    app.include_router(stats.router)
     return app
 
 

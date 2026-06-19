@@ -290,6 +290,25 @@
             "description": "EXACT agency-native id; unique only when combined with source."
           },
           {
+            "name": "firm_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{32}$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Canonical firm cluster id; returns recalls where this firm appears in ANY role (incl. co-recalled/secondary firms), unlike `firm` (primary-name substring). Obtain from RecallDetail.firms[].firm_id.",
+              "title": "Firm Id"
+            },
+            "description": "Canonical firm cluster id; returns recalls where this firm appears in ANY role (incl. co-recalled/secondary firms), unlike `firm` (primary-name substring). Obtain from RecallDetail.firms[].firm_id."
+          },
+          {
             "name": "distribution_state",
             "in": "query",
             "required": false,
@@ -675,6 +694,25 @@
               "title": "Source Recall Id"
             },
             "description": "EXACT agency-native id; unique only when combined with source."
+          },
+          {
+            "name": "firm_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{32}$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Canonical firm cluster id; returns recalls where this firm appears in ANY role (incl. co-recalled/secondary firms), unlike `firm` (primary-name substring). Obtain from RecallDetail.firms[].firm_id.",
+              "title": "Firm Id"
+            },
+            "description": "Canonical firm cluster id; returns recalls where this firm appears in ANY role (incl. co-recalled/secondary firms), unlike `firm` (primary-name substring). Obtain from RecallDetail.firms[].firm_id."
           },
           {
             "name": "distribution_state",
@@ -1192,10 +1230,840 @@
           }
         }
       }
+    },
+    "/stats/overview": {
+      "get": {
+        "tags": [
+          "stats"
+        ],
+        "summary": "Headline KPIs: total recalls, distinct firms, sources covered, last gold rebuild.",
+        "operationId": "overview_stats_overview_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatsOverview"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "BadCursor.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "InvalidParameter.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "UpstreamUnavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stats/recalls-by-period": {
+      "get": {
+        "tags": [
+          "stats"
+        ],
+        "summary": "Recall counts per period (month/week/year) per source + 'ALL' rollup.",
+        "operationId": "recalls_by_period_stats_recalls_by_period_get",
+        "parameters": [
+          {
+            "name": "grain",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/Grain",
+              "description": "Time grain: month | week | year.",
+              "default": "month"
+            },
+            "description": "Time grain: month | week | year."
+          },
+          {
+            "name": "source",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/StatsSource"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter to one feed (incl. the 'ALL' rollup where the fact carries it). Omit for every row. A source absent from a fact returns [].",
+              "title": "Source"
+            },
+            "description": "Filter to one feed (incl. the 'ALL' rollup where the fact carries it). Omit for every row. A source absent from a fact returns []."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PeriodCount"
+                  },
+                  "title": "Response Recalls By Period Stats Recalls By Period Get"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "BadCursor.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "InvalidParameter.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "UpstreamUnavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stats/monthly-trend": {
+      "get": {
+        "tags": [
+          "stats"
+        ],
+        "summary": "Per-source monthly trend with rolling averages + year-over-year change.",
+        "operationId": "monthly_trend_stats_monthly_trend_get",
+        "parameters": [
+          {
+            "name": "source",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/StatsSource"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter to one feed (incl. the 'ALL' rollup where the fact carries it). Omit for every row. A source absent from a fact returns [].",
+              "title": "Source"
+            },
+            "description": "Filter to one feed (incl. the 'ALL' rollup where the fact carries it). Omit for every row. A source absent from a fact returns []."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MonthlyTrendPoint"
+                  },
+                  "title": "Response Monthly Trend Stats Monthly Trend Get"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "BadCursor.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "InvalidParameter.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "UpstreamUnavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stats/by-classification": {
+      "get": {
+        "tags": [
+          "stats"
+        ],
+        "summary": "Recall counts by source-native classification + risk_level (+ 'ALL').",
+        "operationId": "by_classification_stats_by_classification_get",
+        "parameters": [
+          {
+            "name": "source",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/StatsSource"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter to one feed (incl. the 'ALL' rollup where the fact carries it). Omit for every row. A source absent from a fact returns [].",
+              "title": "Source"
+            },
+            "description": "Filter to one feed (incl. the 'ALL' rollup where the fact carries it). Omit for every row. A source absent from a fact returns []."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ClassificationCount"
+                  },
+                  "title": "Response By Classification Stats By Classification Get"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "BadCursor.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "InvalidParameter.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "UpstreamUnavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stats/status": {
+      "get": {
+        "tags": [
+          "stats"
+        ],
+        "summary": "Active/inactive/unknown recall counts per source (+ 'ALL').",
+        "operationId": "status_stats_status_get",
+        "parameters": [
+          {
+            "name": "source",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/StatsSource"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter to one feed (incl. the 'ALL' rollup where the fact carries it). Omit for every row. A source absent from a fact returns [].",
+              "title": "Source"
+            },
+            "description": "Filter to one feed (incl. the 'ALL' rollup where the fact carries it). Omit for every row. A source absent from a fact returns []."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/StatusCount"
+                  },
+                  "title": "Response Status Stats Status Get"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "BadCursor.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "InvalidParameter.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "UpstreamUnavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stats/firm-leaderboard": {
+      "get": {
+        "tags": [
+          "stats"
+        ],
+        "summary": "Most-recalled firms, ranked (top-N).",
+        "operationId": "firm_leaderboard_stats_firm_leaderboard_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "description": "Top-N firms (1-100).",
+              "default": 20,
+              "title": "Limit"
+            },
+            "description": "Top-N firms (1-100)."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/FirmLeaderRow"
+                  },
+                  "title": "Response Firm Leaderboard Stats Firm Leaderboard Get"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "BadCursor.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "InvalidParameter.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "UpstreamUnavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stats/by-geography": {
+      "get": {
+        "tags": [
+          "stats"
+        ],
+        "summary": "Per-state recall counts; basis = distribution | firm_registration (+ 'ALL').",
+        "operationId": "by_geography_stats_by_geography_get",
+        "parameters": [
+          {
+            "name": "basis",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/GeographyBasis",
+              "description": "distribution | firm_registration (different questions, not a toggle).",
+              "default": "distribution"
+            },
+            "description": "distribution | firm_registration (different questions, not a toggle)."
+          },
+          {
+            "name": "source",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/StatsSource"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter to one feed (incl. the 'ALL' rollup where the fact carries it). Omit for every row. A source absent from a fact returns [].",
+              "title": "Source"
+            },
+            "description": "Filter to one feed (incl. the 'ALL' rollup where the fact carries it). Omit for every row. A source absent from a fact returns []."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/GeographyCount"
+                  },
+                  "title": "Response By Geography Stats By Geography Get"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "BadCursor.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "InvalidParameter.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "UpstreamUnavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stats/by-country": {
+      "get": {
+        "tags": [
+          "stats"
+        ],
+        "summary": "Per-distribution-country recall counts (FDA/USDA + 'ALL').",
+        "operationId": "by_country_stats_by_country_get",
+        "parameters": [
+          {
+            "name": "source",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/StatsSource"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter to one feed (incl. the 'ALL' rollup where the fact carries it). Omit for every row. A source absent from a fact returns [].",
+              "title": "Source"
+            },
+            "description": "Filter to one feed (incl. the 'ALL' rollup where the fact carries it). Omit for every row. A source absent from a fact returns []."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/CountryCount"
+                  },
+                  "title": "Response By Country Stats By Country Get"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "BadCursor.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "InvalidParameter.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "UpstreamUnavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stats/units": {
+      "get": {
+        "tags": [
+          "stats"
+        ],
+        "summary": "Units recalled per source x unit_category x month (NOT cross-source comparable).",
+        "operationId": "units_stats_units_get",
+        "parameters": [
+          {
+            "name": "source",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/StatsSource"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter to one feed (incl. the 'ALL' rollup where the fact carries it). Omit for every row. A source absent from a fact returns [].",
+              "title": "Source"
+            },
+            "description": "Filter to one feed (incl. the 'ALL' rollup where the fact carries it). Omit for every row. A source absent from a fact returns []."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/UnitsRow"
+                  },
+                  "title": "Response Units Stats Units Get"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "BadCursor.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "InvalidParameter.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "UpstreamUnavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
     "schemas": {
+      "ClassificationCount": {
+        "properties": {
+          "source": {
+            "type": "string",
+            "title": "Source",
+            "description": "Agency feed, or 'ALL'."
+          },
+          "classification": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Classification",
+            "description": "SOURCE-NATIVE classification (FDA 1/2/3/NC; USDA Class I/II/III + Public Health Alert; USCG H/L/M/S; null = CPSC/NHTSA unclassified). NOT cross-source comparable."
+          },
+          "risk_level": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Risk Level",
+            "description": "USDA-only health-risk label; null for the other sources."
+          },
+          "event_count": {
+            "type": "integer",
+            "title": "Event Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source",
+          "event_count"
+        ],
+        "title": "ClassificationCount",
+        "description": "Recall counts by source-native classification + risk_level (+ the 'ALL' rollup)."
+      },
+      "CountryCount": {
+        "properties": {
+          "source": {
+            "type": "string",
+            "title": "Source",
+            "description": "Agency feed (FDA/USDA), or 'ALL'."
+          },
+          "country_code": {
+            "type": "string",
+            "title": "Country Code",
+            "description": "ISO-3166-1 alpha-2 (incl. a derived 'US')."
+          },
+          "recall_count": {
+            "type": "integer",
+            "title": "Recall Count",
+            "description": "Recalls distributed to this country. Multi-valued — a US+abroad recall counts once per country, so per-country counts sum to more than the distinct-recall total."
+          }
+        },
+        "type": "object",
+        "required": [
+          "source",
+          "country_code",
+          "recall_count"
+        ],
+        "title": "CountryCount",
+        "description": "Per-distribution-country recall counts (FDA/USDA + 'ALL') — the country analogue of state."
+      },
       "DbHealth": {
         "properties": {
           "status": {
@@ -1403,6 +2271,74 @@
         "title": "FdaAttributes",
         "description": "An FDA FEI firm row (firm_fda_attributes, join key firm_fei_num cast to text)."
       },
+      "FirmLeaderRow": {
+        "properties": {
+          "firm_id": {
+            "type": "string",
+            "title": "Firm Id",
+            "description": "Canonical firm id; use with GET /firms/{firm_id}."
+          },
+          "canonical_name": {
+            "type": "string",
+            "title": "Canonical Name"
+          },
+          "event_count": {
+            "type": "integer",
+            "title": "Event Count",
+            "description": "Total distinct recalls for the firm (all sources)."
+          },
+          "active_recalls": {
+            "type": "integer",
+            "title": "Active Recalls",
+            "description": "Currently-active recalls (FDA/USDA/USCG only)."
+          },
+          "product_count": {
+            "type": "integer",
+            "title": "Product Count",
+            "description": "Distinct recalled products (per-firm footprint)."
+          },
+          "event_count_rank": {
+            "type": "integer",
+            "title": "Event Count Rank",
+            "description": "Dense rank by total recalls (1 = most-recalled)."
+          },
+          "first_recall_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Recall At"
+          },
+          "last_recall_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Recall At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "firm_id",
+          "canonical_name",
+          "event_count",
+          "active_recalls",
+          "product_count",
+          "event_count_rank"
+        ],
+        "title": "FirmLeaderRow",
+        "description": "A row of the most-recalled-firms leaderboard (ranked over mart_firm_profile)."
+      },
       "FirmProfile": {
         "properties": {
           "firm_id": {
@@ -1592,6 +2528,58 @@
         "title": "FirmRef",
         "description": "An element of a recall's ``firms[]`` rollup; ``firm_id`` links to ``GET /firms/{id}``."
       },
+      "GeographyBasis": {
+        "type": "string",
+        "enum": [
+          "distribution",
+          "firm_registration"
+        ],
+        "title": "GeographyBasis",
+        "description": "The two (non-interchangeable) geography lenses for ``/stats/by-geography``."
+      },
+      "GeographyCount": {
+        "properties": {
+          "geography_basis": {
+            "type": "string",
+            "title": "Geography Basis",
+            "description": "'distribution' (where the product went; FDA/USDA) or 'firm_registration' (where the firm is registered; USDA/USCG/FDA). The two lenses are DIFFERENT questions — not interchangeable."
+          },
+          "source": {
+            "type": "string",
+            "title": "Source",
+            "description": "Agency feed, or 'ALL'."
+          },
+          "state_code": {
+            "type": "string",
+            "title": "State Code",
+            "description": "USPS 2-letter state/territory code."
+          },
+          "recall_count": {
+            "type": "integer",
+            "title": "Recall Count",
+            "description": "Recalls touching this state. NOTE: a recall is counted in EVERY state it touches, so per-state counts SUM TO MORE than the total (industry-footprint reading)."
+          }
+        },
+        "type": "object",
+        "required": [
+          "geography_basis",
+          "source",
+          "state_code",
+          "recall_count"
+        ],
+        "title": "GeographyCount",
+        "description": "Per-US-state recall counts, two lenses (distribution vs firm-registration) + 'ALL' rollup."
+      },
+      "Grain": {
+        "type": "string",
+        "enum": [
+          "month",
+          "week",
+          "year"
+        ],
+        "title": "Grain",
+        "description": "Time grain for ``/stats/recalls-by-period``."
+      },
       "Health": {
         "properties": {
           "status": {
@@ -1614,6 +2602,80 @@
         ],
         "title": "Health",
         "description": "Liveness body."
+      },
+      "MonthlyTrendPoint": {
+        "properties": {
+          "month": {
+            "type": "string",
+            "format": "date",
+            "title": "Month"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source",
+            "description": "Agency feed (per-source only; no 'ALL' rollup on this fact)."
+          },
+          "event_count": {
+            "type": "integer",
+            "title": "Event Count"
+          },
+          "rolling_3mo_avg": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rolling 3Mo Avg",
+            "description": "3-month rolling average."
+          },
+          "rolling_12mo_avg": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rolling 12Mo Avg",
+            "description": "12-month rolling average."
+          },
+          "event_count_year_ago": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event Count Year Ago",
+            "description": "event_count 12 months earlier (null for the first year)."
+          },
+          "yoy_pct_change": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Yoy Pct Change",
+            "description": "Year-over-year % change vs 12 months ago (null when undefined)."
+          }
+        },
+        "type": "object",
+        "required": [
+          "month",
+          "source",
+          "event_count"
+        ],
+        "title": "MonthlyTrendPoint",
+        "description": "One month of the per-source trend over a dense spine — rolling averages + YoY."
       },
       "Page_ProductSearchHit_": {
         "properties": {
@@ -1773,6 +2835,34 @@
           "limit"
         ],
         "title": "Page[RecallSummary]"
+      },
+      "PeriodCount": {
+        "properties": {
+          "period": {
+            "type": "string",
+            "format": "date",
+            "title": "Period",
+            "description": "Period start (month / ISO-week Monday / Jan-1 per grain)."
+          },
+          "source": {
+            "type": "string",
+            "title": "Source",
+            "description": "Agency feed, or 'ALL' for the all-source rollup."
+          },
+          "event_count": {
+            "type": "integer",
+            "title": "Event Count",
+            "description": "Distinct recall events in this period for this source."
+          }
+        },
+        "type": "object",
+        "required": [
+          "period",
+          "source",
+          "event_count"
+        ],
+        "title": "PeriodCount",
+        "description": "One (period, source) recall count — backs ``/stats/recalls-by-period`` (month/week/year)."
       },
       "ProductSearchHit": {
         "properties": {
@@ -2668,6 +3758,137 @@
         ],
         "title": "Source",
         "description": "The one closed cross-source domain (uppercase). Free 422 on a bad path/query value."
+      },
+      "StatsOverview": {
+        "properties": {
+          "total_recalls": {
+            "type": "integer",
+            "title": "Total Recalls",
+            "description": "Count of recall events (rows in mart_recall_summary)."
+          },
+          "distinct_firms": {
+            "type": "integer",
+            "title": "Distinct Firms",
+            "description": "Count of canonical firms (rows in mart_firm_profile)."
+          },
+          "sources": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Sources",
+            "description": "The feeds covered: CPSC, FDA, USDA, NHTSA, USCG."
+          },
+          "last_rebuilt_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Rebuilt At",
+            "description": "gold_meta.rebuilt_at — when the gold marts were last rebuilt (UTC)."
+          }
+        },
+        "type": "object",
+        "required": [
+          "total_recalls",
+          "distinct_firms",
+          "sources"
+        ],
+        "title": "StatsOverview",
+        "description": "Headline KPIs for the landing page (API-computed, not a stored ``fct_*``)."
+      },
+      "StatsSource": {
+        "type": "string",
+        "enum": [
+          "CPSC",
+          "FDA",
+          "USDA",
+          "NHTSA",
+          "USCG",
+          "ALL"
+        ],
+        "title": "StatsSource",
+        "description": "The ``fct_*`` source domain — the 5 agency feeds plus the synthesized ``ALL`` rollup.\n\nDistinct from the strict ``Source`` enum (which has no ``ALL``). Per-endpoint population varies:\nmonthly-trend is per-source only (no ``ALL``); by-country is FDA/USDA (+``ALL``); units is\nNHTSA/USCG/FDA/USDA (no ``ALL``, no CPSC). A source absent from a given fact returns ``[]``."
+      },
+      "StatusCount": {
+        "properties": {
+          "source": {
+            "type": "string",
+            "title": "Source",
+            "description": "Agency feed, or 'ALL'."
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "description": "'active' / 'inactive' / 'unknown'. CPSC/NHTSA carry no lifecycle -> 'unknown'."
+          },
+          "event_count": {
+            "type": "integer",
+            "title": "Event Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source",
+          "status",
+          "event_count"
+        ],
+        "title": "StatusCount",
+        "description": "Active / inactive / unknown recall counts per source (+ the 'ALL' rollup)."
+      },
+      "UnitsRow": {
+        "properties": {
+          "source": {
+            "type": "string",
+            "title": "Source",
+            "description": "NHTSA/USCG (units affected) or FDA/USDA (quantity). No 'ALL' rollup."
+          },
+          "unit_category": {
+            "type": "string",
+            "title": "Unit Category",
+            "description": "'count' / 'weight' / 'volume' / 'grouping' — keeps incommensurable units apart; never sum across categories or sources."
+          },
+          "period": {
+            "type": "string",
+            "format": "date",
+            "title": "Period",
+            "description": "Month start."
+          },
+          "recalls_with_units": {
+            "type": "integer",
+            "title": "Recalls With Units"
+          },
+          "total_units": {
+            "type": "number",
+            "title": "Total Units",
+            "description": "Sum of per-recall magnitudes (a recall-magnitude measure, not unique items)."
+          },
+          "avg_units_per_recall": {
+            "type": "number",
+            "title": "Avg Units Per Recall"
+          },
+          "max_units": {
+            "type": "number",
+            "title": "Max Units"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source",
+          "unit_category",
+          "period",
+          "recalls_with_units",
+          "total_units",
+          "avg_units_per_recall",
+          "max_units"
+        ],
+        "title": "UnitsRow",
+        "description": "Units recalled per source x unit_category x month. NOT cross-source comparable (no 'ALL')."
       },
       "UscgManufacturer": {
         "properties": {

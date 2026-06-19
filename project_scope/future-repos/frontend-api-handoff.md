@@ -4,7 +4,7 @@
 
 This is the **API-consumption** companion to the pipeline repo's `project_scope/future-repos/website-frontend-plan.md` (framework/architecture plan) and to this repo's `documentation/frontend-api-docs-handoff.md` (how to render the public **API-docs page** with Starlight/Scalar). This doc owns the **how-the-site-actually-talks-to-the-API** layer: the live contract, the data-fetch model, every operational quirk, and the **Cloudflare + Fly.io custom-domain runbook**.
 
-> **Read §13 first if you've read the website plan.** Several of that plan's API specifics are stale or ahead of what's built — wrong filter param names, a `/stats/*` + `fct_*` dashboard family that **does not exist yet**, a `?firm_id=` recalls filter that doesn't exist, FDA `Class I/II/III` (now `1/2/3/NC`), and lifecycle/edit fields that were pruned. §3 is the authoritative current contract; §13 reconciles the two.
+> **Read §13 first if you've read the website plan.** Several of that plan's API specifics were stale — wrong filter param names, FDA `Class I/II/III` (now `1/2/3/NC`), and lifecycle/edit fields that were pruned. The two big gaps it flagged — the `/stats/*` + `fct_*` dashboard family and the `?firm_id=` recalls filter — are now **BUILT (2026-06-19)**. §3 is the authoritative current contract; §13 reconciles the two.
 
 ---
 
@@ -18,7 +18,7 @@ Browser / build step ──HTTPS GET──> FastAPI (Fly.io) ──asyncpg, read
 - The website **never touches Postgres**. It only makes **HTTPS `GET`** requests to the API and renders the JSON. The API holds a SELECT-only `recalls_readonly` role; there is no write path to expose.
 - **Two-speed access (the website plan's hybrid lever), reconciled to reality:**
   - **Per-entity + search** (recalls browser, recall detail, firm profile, product search) → **fetch live** from the API. These endpoints **exist today** and are fully buildable now (§3).
-  - **Aggregates / dashboards** (`/stats/*` over `fct_*`) → the plan wants a **build-time pull**, but **those endpoints are not built** (§13). Until they are, the dashboards page is blocked — either add the `/stats/*` API surface, or have the *pipeline* export `fct_*` to static JSON for a build-time bake. The website still never queries PG directly.
+  - **Aggregates / dashboards** (`/stats/*` over `fct_*`) → **now built** (§3.8). Fetch them at **build time** (small, cacheable, change daily); the dashboards page is unblocked. The website still never queries PG directly.
 - **All responses are JSON**, `GET`-only, no auth, no content negotiation (send `Accept: application/json` or omit it).
 
 ---
@@ -39,7 +39,7 @@ Expose the base URL to the site via a single env var (Astro convention `PUBLIC_A
 
 ## 3. The endpoint contract (authoritative — current)
 
-Seven endpoints. The machine-readable source of truth is `openapi.json`; **generate the TS client from it** (§12), don't hand-type these. This table is the human map.
+Seven core endpoints (below) **plus the `/stats/*` family (§3.8)**. The machine-readable source of truth is `openapi.json`; **generate the TS client from it** (§12), don't hand-type these. This table is the human map.
 
 ### 3.1 `GET /recalls` — list recalls → `Page<RecallSummary>`
 
@@ -55,7 +55,8 @@ Newest-first (`published_at DESC, recall_event_id ASC`), keyset-paginated. **All
 | `distribution_state` | USPS 2-letter | ✓ | array-overlap; **FDA/USDA only** |
 | `distribution_country` | ISO alpha-2 | ✓ | foreign-only (`US` excluded); **FDA in practice** |
 | `source_recall_id` | string | – | exact; unique only **with** `source` |
-| `firm` | string (2–200) | – | **substring on `primary_firm_name` only** — NOT a firm id, NOT secondary firms |
+| `firm` | string (2–200) | – | substring on `primary_firm_name` only (primary firm; for any-role matching use `firm_id`) |
+| `firm_id` | 32-hex (`^[0-9a-f]{32}$`) | – | **a firm's recalls** — jsonb containment on the `firms` rollup; matches the firm in **any** role (incl. co-recalled). From `RecallDetail.firms[].firm_id`. |
 | `published_after` / `published_before` | `YYYY-MM-DD` | – | whole-day inclusive |
 | `announced_after` / `announced_before` | `YYYY-MM-DD` | – | nulls excluded (announced_at is nullable) |
 | `limit` | int 1–100 (default 25) | – | page size |
@@ -84,6 +85,24 @@ The full wide row (summary fields + narrative + geo arrays + `firms`/`product_na
 ### 3.6 `GET /health` · 3.7 `GET /health/db`
 
 Liveness (no DB) and readiness (`SELECT 1`; **503** when Neon is cold/unreachable). Both are `no-store` and rate-limit-exempt. Use `/health/db` to **pre-warm** before a burst (§11).
+
+### 3.8 `GET /stats/*` — dashboard aggregates (bare JSON arrays)
+
+Read-through over the gold `fct_*` marts; each returns a **bare array** (`/stats/overview` a single object) — no pagination. Optional `source` filter (the 5 feeds + the `ALL` rollup); per-endpoint population varies. Cacheable (`max-age=300`) — built for the build-time pull.
+
+| Endpoint | Returns | Backs (website plan) |
+|---|---|---|
+| `/stats/overview` | `StatsOverview` | landing KPI strip (§5.1) |
+| `/stats/recalls-by-period?grain=month\|week\|year` | `PeriodCount[]` | recalls-over-time (§5.1, §5.5) |
+| `/stats/monthly-trend` | `MonthlyTrendPoint[]` | trend + rolling + YoY (§5.5) |
+| `/stats/by-classification` | `ClassificationCount[]` | by-classification (§5.1, §5.5) |
+| `/stats/status` | `StatusCount[]` | active vs inactive (§5.5) |
+| `/stats/firm-leaderboard?limit=` | `FirmLeaderRow[]` | most-recalled firms (§5.5) |
+| `/stats/by-geography?basis=distribution\|firm_registration` | `GeographyCount[]` | the two choropleths (§5.5) |
+| `/stats/by-country` | `CountryCount[]` | country distribution |
+| `/stats/units` | `UnitsRow[]` | units recalled (§5.5) |
+
+**Carry the caveats (§7):** `classification` is source-native (FDA `1/2/3/NC`); the two geography lenses are different questions (render two captioned charts, never a toggle); geography/country counts multi-count (per-state/country sums > the total); units are not cross-source comparable. Detail in `api-reference.md` §GET /stats/* + `data_contract.md`.
 
 ---
 
@@ -168,7 +187,7 @@ Implications: build-time aggregate pulls can rely on data being stable for ~a da
 Fly runs **scale-to-zero** (`min_machines_running=0`) over **Neon serverless** (auto-suspend). After idle, the **first** request triggers a machine wake **and** a Neon wake:
 - The machine auto-starts on the incoming request; Neon may take a few seconds to resume. While Neon is cold, data endpoints can return **`503 upstream_unavailable` + `Retry-After: 5`** (the API caps the DB connect at 5 s and fails fast rather than hanging).
 - **Runtime islands:** show a friendly "waking up…" state, then **retry with backoff** on `503` (respect `Retry-After`). Optionally fire a `GET /health/db` first to pre-warm, then load data once it returns 200.
-- **Build-time pulls (if/when `/stats/*` or a gold export exists):** retry with backoff and **fail the build loudly** if the API never wakes — better a stale-but-good deploy than a blank dashboard.
+- **Build-time pulls (the `/stats/*` aggregates, §3.8):** retry with backoff and **fail the build loudly** if the API never wakes — better a stale-but-good deploy than a blank dashboard.
 - To remove cold starts entirely you can set `min_machines_running = 1` in `fly.toml` (within free allowance) — a backend toggle, not a frontend concern.
 
 ---
@@ -186,21 +205,21 @@ Fly runs **scale-to-zero** (`min_machines_running=0`) over **Neon serverless** (
 
 ---
 
-## 13. Reconciliation with `website-frontend-plan.md` (what's stale / blocked)
+## 13. Reconciliation with `website-frontend-plan.md` (what was stale — now reconciled)
 
-The plan's **strategy is sound and current** (Astro + Cloudflare Pages + hybrid + OpenAPI-generated client — it matches your Cloudflare infra). Its **API specifics are not.** Fix these before/while building:
+The plan's **strategy is sound and current** (Astro + Cloudflare Pages + hybrid + OpenAPI-generated client — it matches your Cloudflare infra). Its **API specifics needed correction** — the two big gaps (dashboards + the firm-recalls filter) are now **built** (the ✅ rows below); the rest are param/field corrections to apply while building:
 
 | Plan says | Reality | Action |
 |---|---|---|
-| `/stats/*` + `fct_*` dashboard endpoints (§5.1, §5.5: 8 panels, leaderboard, overview KPIs) | **Do not exist.** The API has only the 7 endpoints in §3. | **Blocker for the dashboards + landing charts.** Either (a) build a `/stats/*` API phase over `fct_*` (pipeline ADR 0024), or (b) have the *pipeline* export `fct_*` → static JSON for a build-time bake. Sequence dashboards **after** that decision; the entity/search pages don't depend on it. |
-| `GET /recalls?...&date_from=&date_to=&firm_id=&status=&page=` | Params are `published_after`/`published_before`, **no `firm_id`**, `is_active` (not `status`), `cursor` (not `page`) | Use §3.1 names. Keyset, not offset (§4). |
-| Firm page "this firm's recalls" via `?firm_id={id}` (§5.4) | **No `firm_id` filter on `/recalls`.** Only `firm=` substring on the *primary* firm name (imprecise; misses co-recalled). | Small API gap — recommend adding `?firm_id=` (filters the `firms` rollup). Until then, the firm page can't list a firm's recalls precisely. **Flag to backend.** |
+| `/stats/*` + `fct_*` dashboard endpoints (§5.1, §5.5: 8 panels, leaderboard, overview KPIs) | ✅ **BUILT** (2026-06-19) — the 9 `/stats/*` endpoints (§3.8) over the gold `fct_*`. | Use §3.8; fetch at build time. The landing charts + dashboards page are unblocked. |
+| `GET /recalls?...&date_from=&date_to=&status=&page=` | Params are `published_after`/`published_before`, `is_active` (not `status`), keyset `cursor` (not `page`); `firm_id` now exists (§3.1) | Use §3.1 names. Keyset, not offset (§4). |
+| Firm page "this firm's recalls" via `?firm_id={id}` (§5.4) | ✅ **BUILT** (2026-06-19) — `GET /recalls?firm_id={id}` (§3.1): jsonb containment on the `firms` rollup, matches the firm in **any** role (incl. co-recalled). | Use it directly; it composes with the other `/recalls` filters + pagination. |
 | "FDA Class I/II/III" by-classification chart (§5.1) | FDA emits `1/2/3/NC` | Source-native legends (§7.1). |
 | Lifecycle timeline "announced → amended → terminated + edit-history flags" (§5.3) | Edit counts/timestamps/presence flags were **pruned**; only `has_been_edited` (bool, no date) remains | Timeline = `announced_at → published_at` + `lifecycle_status` + a `(revised)` badge. No dated edit history. |
 | Per-product `upc` column (§5.3/§5.6) | **Dropped** from the response; `upc=` search still works (recall-level) | Don't expect a `upc` field; keep the UPC honesty caveat (§7.3). |
 | Recall keyword search not mentioned | `GET /recalls/search?q=` exists (§3.2) | Opportunity for a recall-level search, distinct from product search. |
 
-**Net:** buildable **now** against the live API — recalls browser (§5.2), recall detail (§5.3, minus the rich timeline), firm profile (§5.4, minus the per-firm recalls list until `?firm_id=`), product search (§5.6). **Blocked on backend work** — landing charts + dashboards (§5.1/§5.5) until `/stats/*`-or-export; precise firm-recalls list until `?firm_id=`.
+**Net:** buildable **now** against the live API — recalls browser (§5.2), recall detail (§5.3, minus the rich timeline; those fields were pruned), firm profile **incl. the per-firm recalls list** via `?firm_id=` (§5.4), product search (§5.6), **and the landing charts + dashboards** (§5.1/§5.5) over `/stats/*` (§3.8). The earlier blockers are cleared.
 
 ---
 
@@ -257,5 +276,5 @@ Set `min_machines_running = 1` in the API's `fly.toml` (within the free machine 
 3. Render the **API-docs page** per `documentation/frontend-api-docs-handoff.md` (Starlight + `starlight-openapi`, optional Scalar).
 4. Surface the **data-honesty captions** (§7) from `documentation/data_contract.md` — source-native classification, tri-state active, recall-level UPC, two geography lenses, `has_been_edited`-only.
 5. Handle **cold start (503 + retry)**, **rate limit (debounce + 429 backoff)**, and **keyset paging (opaque cursor, 400→reset)**.
-6. **Defer the dashboards** until the `/stats/*` API surface (or a pipeline gold export) lands; flag the missing `?firm_id=` recalls filter to the backend (§13).
+6. **Build the dashboards** against `/stats/*` (§3.8) — fetch the aggregates at build time — and use `?firm_id=` (§3.1) for the firm page's recalls list. (Both shipped 2026-06-19.)
 7. Stand up the domains per §14 (Pages apex + Fly `api.` subdomain, grey-cloud).
