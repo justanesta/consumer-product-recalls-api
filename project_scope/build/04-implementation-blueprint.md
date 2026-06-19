@@ -1,5 +1,7 @@
 # 04 — Implementation Blueprint (module-by-module skeletons)
 
+> **⚠️ Post-apply reconciliation (2026-06-19, `feature/api-audit`).** The API **response** contract was narrowed *after* this blueprint was written. The provenance apply **pruned six observability fields** from the response models and the `queries/recalls.py` table literal / `_LIST_COLS` (`is_currently_active`, `was_ever_retracted`, `first_seen_at`, `last_seen_at`, `edit_count`, `edit_event_count`; **kept** `has_been_edited`) and **dropped the all-null per-product `ProductSearchHit.upc`** field from `_HIT_COLS` + the model. The `sa.column(...)`/`_LIST_COLS`/`_HIT_COLS` skeletons below that still include those columns are **pre-prune**; the gold marts still carry them and the `upc=` search path is unchanged. Trust the current `src/recalls_api/` source + [`openapi.json`](../../openapi.json).
+
 > **Purpose.** Hand the build session a real, type-annotated skeleton for **every** module in
 > `src/recalls_api/`, plus the per-module key decisions, async pitfalls, and `# TODO(build)` markers.
 > This is the *how*. The *what* (column/type/null/enum facts) lives in **03 (API contract)** and is

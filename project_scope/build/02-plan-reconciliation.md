@@ -1,5 +1,7 @@
 # Plan Reconciliation — Drift Report (recalls-api)
 
+> **⚠️ Post-apply reconciliation (2026-06-19, `feature/api-audit`).** The API **response** contract was narrowed *after* this doc was written. The provenance apply **pruned six observability fields** from the response models (`is_currently_active`, `was_ever_retracted`, `first_seen_at`, `last_seen_at`, `edit_count`, `edit_event_count`; **kept** `has_been_edited`) and **dropped the all-null per-product `ProductSearchHit.upc`** response field. The **gold marts still carry** these columns, and the `upc=` **search selector** is unchanged. Where field lists below (e.g. the `RecallSummary` list projection, the model `| None` nullability lists) still show the pruned fields or per-product `upc`, they describe the **pre-prune** API — trust [`openapi.json`](../../openapi.json) + [`documentation/`](../../documentation/) for the current contract.
+
 > Compares `project_scope/fastapi-serving-layer-plan.md` (the design being hardened) against the
 > orchestrator-verified mart facts and the directly-read mart SQL / silver SQL / ADRs at the pinned
 > commit. **Severity:** `blocker` (will break or mislead the build), `important` (must change a

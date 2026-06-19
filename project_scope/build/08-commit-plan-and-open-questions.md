@@ -1,5 +1,7 @@
 # 08 — Commit Plan, Prerequisites & Open Questions (recalls-api)
 
+> **⚠️ Post-apply reconciliation (2026-06-19, `feature/api-audit`).** This commit plan reflects the *original* build. The later provenance apply **pruned six observability fields** from the response models (`is_currently_active`, `was_ever_retracted`, `first_seen_at`, `last_seen_at`, `edit_count`, `edit_event_count`; **kept** `has_been_edited`) and **dropped the all-null per-product `ProductSearchHit.upc`** field. Commit-step descriptions below that mention `edit_event_count` (etc.) describe the pre-prune build; the gold marts still carry those columns and the `upc=` search selector is unchanged. Current contract: [`openapi.json`](../../openapi.json) + [`documentation/`](../../documentation/).
+
 > **Purpose.** The execution map for the build session: what must be true *before* code can ship live,
 > the exact phased branch+commit sequence to write the API, the per-branch gates and acceptance
 > criteria, the cross-branch dependency order, and the resolved-vs-remaining decision ledger with a

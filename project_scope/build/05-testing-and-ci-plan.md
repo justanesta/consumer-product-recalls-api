@@ -1,5 +1,7 @@
 # 05 — Testing & CI Plan (recalls-api)
 
+> **⚠️ Post-apply reconciliation (2026-06-19, `feature/api-audit`).** The API **response** contract was narrowed *after* this plan was written. The provenance apply **pruned six observability fields** from the response models (`is_currently_active`, `was_ever_retracted`, `first_seen_at`, `last_seen_at`, `edit_count`, `edit_event_count`; **kept** `has_been_edited`) and **dropped the all-null per-product `ProductSearchHit.upc`** field. The seed-table DDL and `INSERT` column lists below still include these columns **on purpose** — the seed mirrors the gold marts, which keep them — but the **expected-response** model dicts (e.g. those asserting `edit_event_count`) are **pre-prune**. Also note the FDA fixture classification was corrected to source-native `2` (FDA never emits `Class I`). Current expectations live in `tests/` + [`openapi.json`](../../openapi.json).
+
 > **Hardened spec.** This doc tells the build session exactly how to test and gate the read-only
 > serving API. It mirrors the house gate verbatim from pipeline **ADR 0015** (testing strategy) and
 > **ADR 0018** (CI posture), adapted for an API repo that owns **no schema and no dbt** (so: no

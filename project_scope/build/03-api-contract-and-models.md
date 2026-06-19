@@ -1,5 +1,7 @@
 # 03 — API Contract & Pydantic Models (recalls-api)
 
+> **⚠️ Post-apply reconciliation (2026-06-19, `feature/api-audit`).** This is the model-contract doc, so heed the drift: the API **response** contract was narrowed *after* it was written. The provenance apply **pruned six observability fields** from `RecallSummary`/`RecallDetail` (`is_currently_active`, `was_ever_retracted`, `first_seen_at`, `last_seen_at`, `edit_count`, `edit_event_count`; **kept** `has_been_edited`) and **dropped the all-null per-product `ProductSearchHit.upc`** field. The Pydantic snippets and field tables below that still declare those fields are **pre-prune** — do not copy them verbatim. The `upc=` **search selector** (require-one-of `q|hin|model|upc`) is unchanged. Authoritative current models: the source under `src/recalls_api/models/` + the committed [`openapi.json`](../../openapi.json) + [`documentation/api-reference.md`](../../documentation/api-reference.md).
+
 > **Hardened build spec.** Authoritative schema facts come from `01-ground-truth-gold-marts.md`
 > (cited inline as "see 01 — Mart N"); locked decisions from `02-plan-reconciliation.md`. This doc is
 > the contract the build session implements against directly: every endpoint's params, response model,

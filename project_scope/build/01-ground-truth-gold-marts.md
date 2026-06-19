@@ -1,5 +1,7 @@
 # Ground Truth — Gold Marts Schema Reference (recalls-api)
 
+> **⚠️ Post-apply reconciliation (2026-06-19, `feature/api-audit`).** This doc describes the **gold mart schema**, which is unchanged — but the API **response** contract was narrowed *after* it was written. The provenance apply **pruned six observability fields** from the response models (`is_currently_active`, `was_ever_retracted`, `first_seen_at`, `last_seen_at`, `edit_count`, `edit_event_count`; **kept** `has_been_edited`) and **dropped the all-null per-product `ProductSearchHit.upc`** response field. The gold marts (and so the schema tables below) **still carry** these columns; the API just stopped projecting them, and the `upc=` search selector is unchanged. For the current API surface trust [`openapi.json`](../../openapi.json) + [`documentation/api-reference.md`](../../documentation/api-reference.md) / [`data_contract.md`](../../documentation/data_contract.md).
+
 > **This is the authoritative schema contract the build session trusts INSTEAD of "re-read at
 > build time".** Every fact below was read directly from the mart SQL / `_silver.yml` / `_gold.yml`
 > / silver model SQL at the pinned commit. Where a fact could not be confirmed from source it is

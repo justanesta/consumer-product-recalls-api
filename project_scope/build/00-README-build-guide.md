@@ -1,5 +1,7 @@
 # recalls-api — Build Guide (start here)
 
+> **⚠️ Post-apply reconciliation (2026-06-19, `feature/api-audit`).** The API **response** contract was narrowed *after* these build docs were written. The provenance apply (a) **pruned six pipeline-observability fields** from the response models — `is_currently_active`, `was_ever_retracted`, `first_seen_at`, `last_seen_at`, `edit_count`, `edit_event_count` (**kept** `has_been_edited`) — and (b) **dropped the all-null per-product `ProductSearchHit.upc`** response field. The **gold marts still carry** all of these columns, and the `upc=` **search selector** is unchanged (it matches `recall_product_upcs`). Where field lists or model snippets in this suite still show the pruned fields or per-product `upc`, they describe the **pre-prune** API — the authoritative current contract is the committed [`openapi.json`](../../openapi.json) + [`documentation/api-reference.md`](../../documentation/api-reference.md) / [`data_contract.md`](../../documentation/data_contract.md).
+
 This directory is the **hardened, build-ready spec** for the `recalls-api` repo: an **open (no auth,
 no credentials), read-only** FastAPI service over the PostgreSQL **gold marts** produced by the
 separate pipeline repo `justanesta/consumer-product-recalls`. It hardens
