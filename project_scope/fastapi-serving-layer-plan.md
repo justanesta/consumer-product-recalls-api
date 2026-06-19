@@ -356,8 +356,8 @@ offline/deterministic; **no test hits production Neon.**
   filter params and response models (FastAPI `Field(examples=[...])`).
 - **api-spec-generator workflow:** treat the spec as a build artifact under version control.
   1. Write routes + Pydantic models.
-  2. `python -m recalls_api.export_openapi > openapi.json` (a tiny script that imports the app and dumps
-     `app.openapi()` — pure, testable).
+  2. `python -m recalls_api.export_openapi` (a tiny module that imports the app and writes
+     `app.openapi()` to `openapi.json` directly — pure, testable; no stdout redirect).
   3. Commit `openapi.json`; the contract test (§7) and `openapi-check.yml` fail any PR where the
      regenerated spec differs from the committed one → spec can never silently drift from code.
   4. Downstream (Phase 9 frontend) generates a typed client from `openapi.json` (e.g.

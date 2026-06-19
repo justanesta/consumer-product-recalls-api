@@ -1,19 +1,38 @@
-"""Keyset cursor codec (round-trip + property + tamper), slice_page, and build_page."""
+"""Keyset cursor codec (round-trip + property + tamper + cross-path), slice_page, build_page."""
 
 from __future__ import annotations
 
+import base64
+import json
+
 import pytest
+import sqlalchemy as sa
 from hypothesis import given
 from hypothesis import strategies as st
 
 from recalls_api.errors import BadCursor
 from recalls_api.models.common import Page
-from recalls_api.pagination import Cursor, build_page, slice_page
+from recalls_api.pagination import (
+    Cursor,
+    build_page,
+    published_at_keyset_where,
+    rank_keyset_where,
+    slice_page,
+)
 
 
-def test_cursor_roundtrip() -> None:
-    c = Cursor(("2026-01-01T00:00:00+00:00", "abc123"))
-    assert Cursor.decode(c.encode()) == c
+def _token(payload: object) -> str:
+    """Encode an arbitrary JSON payload as a cursor token (to forge wrong-shape cursors)."""
+    raw = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+    return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
+
+
+def test_cursor_roundtrip_preserves_kind() -> None:
+    p = Cursor(("2026-01-01T00:00:00+00:00", "abc123"), "p")
+    r = Cursor((0.5732, "abc123"), "r")
+    assert Cursor.decode(p.encode()) == p
+    assert Cursor.decode(r.encode()) == r
+    assert Cursor.decode(r.encode()).kind == "r"
 
 
 _value = st.one_of(
@@ -25,10 +44,11 @@ _value = st.one_of(
 )
 
 
-@given(st.lists(_value, min_size=2, max_size=2))  # cursors are always 2-tuples (sort_value, id)
-def test_cursor_roundtrip_property(values: list[object]) -> None:
-    decoded = Cursor.decode(Cursor(tuple(values)).encode())
+@given(st.lists(_value, min_size=2, max_size=2), st.sampled_from(["p", "r"]))
+def test_cursor_roundtrip_property(values: list[object], kind: str) -> None:
+    decoded = Cursor.decode(Cursor(tuple(values), kind).encode())  # type: ignore[arg-type]
     assert list(decoded.values) == values
+    assert decoded.kind == kind
 
 
 @pytest.mark.parametrize(
@@ -46,11 +66,36 @@ def test_cursor_tamper_raises_bad_cursor(bad: str) -> None:
         Cursor.decode(bad)
 
 
-@pytest.mark.parametrize("values", [(), (1,), (1, 2, 3)])
-def test_cursor_wrong_arity_raises_bad_cursor(values: tuple[object, ...]) -> None:
-    # a decodable-but-wrong-shape payload must raise BadCursor (400), not crash the 2-tuple unpack
+@pytest.mark.parametrize(
+    "payload",
+    [
+        ["2026-01-01", "abc"],  # legacy 2-element (no kind tag) -> rejected
+        ["x", "2026-01-01", "abc"],  # unknown kind tag -> rejected
+        ["p", "abc"],  # tagged but only 2 elements -> rejected
+        ["p", "v", "id", "extra"],  # 4 elements -> rejected
+        {"k": "p"},  # not a list
+    ],
+)
+def test_cursor_wrong_shape_or_kind_raises_bad_cursor(payload: object) -> None:
+    # A decodable-but-wrong-shape/kind payload must raise BadCursor (400), not crash downstream.
     with pytest.raises(BadCursor):
-        Cursor.decode(Cursor(values).encode())
+        Cursor.decode(_token(payload))
+
+
+def test_published_at_keyset_rejects_rank_cursor() -> None:
+    # Cross-path replay: a rank ('r') cursor on the published_at seek builder -> BadCursor, not a
+    # float-bound-as-timestamptz 5xx.
+    with pytest.raises(BadCursor):
+        published_at_keyset_where(
+            Cursor((0.5, "abc"), "r"), sa.column("published_at"), sa.column("id")
+        )
+
+
+def test_rank_keyset_rejects_published_at_cursor() -> None:
+    with pytest.raises(BadCursor):
+        rank_keyset_where(
+            Cursor(("2026-01-01T00:00:00+00:00", "abc"), "p"), sa.column("rank"), sa.column("id")
+        )
 
 
 def test_slice_page() -> None:

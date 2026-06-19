@@ -21,7 +21,11 @@ _LIST_DESC = (
     "(seek) paginated — pass the previous page's `next_cursor` back as `cursor`. Filters AND "
     "together: `source`, `classification`, `is_active`, `lifecycle_status`, `distribution_scope`, "
     "`distribution_state`, `distribution_country`, `source_recall_id`, `firm`, plus the "
-    "`published_*` and `announced_*` date ranges. Caveats: `classification`/`lifecycle_status` "
+    "`published_*` and `announced_*` date ranges. The categorical filters (`source`, "
+    "`classification`, `lifecycle_status`, `distribution_scope`, `distribution_state`, "
+    "`distribution_country`) accept multiple values — repeat the param or comma-separate "
+    "(`?source=CPSC,FDA`) for any-of (OR) within a field; different fields still AND. Caveats: "
+    "`classification`/`lifecycle_status` "
     "are source-native (not unified); `is_active`/`lifecycle_status` are null for CPSC/NHTSA "
     "(a value filter excludes those rows); `announced_at` is nullable (an `announced_*` filter "
     "drops rows lacking it); `distribution_state`/`distribution_country` are FDA/USDA-only and "
@@ -62,7 +66,7 @@ async def list_recalls(
     page_rows, has_next = slice_page(rows, page.limit)
     next_cursor = (
         Cursor(
-            (page_rows[-1]["published_at"].isoformat(), page_rows[-1]["recall_event_id"])
+            (page_rows[-1]["published_at"].isoformat(), page_rows[-1]["recall_event_id"]), "p"
         ).encode()
         if has_next and page_rows
         else None
@@ -93,7 +97,7 @@ async def search_recalls(
     rows = list((await conn.execute(stmt)).mappings())
     page_rows, has_next = slice_page(rows, page.limit)
     next_cursor = (
-        Cursor((page_rows[-1]["rank"], page_rows[-1]["recall_event_id"])).encode()
+        Cursor((page_rows[-1]["rank"], page_rows[-1]["recall_event_id"]), "r").encode()
         if has_next and page_rows
         else None
     )

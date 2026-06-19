@@ -21,9 +21,9 @@ The `recalls-api` reads four dbt-materialized gold objects from the pipeline's N
 
 ### List projection
 
-`GET /recalls` and `GET /recalls/search` project 18 columns from `mart_recall_summary` (`queries/recalls.py:_LIST_COLS`):
+`GET /recalls` and `GET /recalls/search` project 17 columns from `mart_recall_summary` (`queries/recalls.py:_LIST_COLS`):
 
-`recall_event_id`, `source`, `source_recall_id`, `title`, `url`, `announced_at`, `published_at`, `classification`, `risk_level`, `lifecycle_status`, `is_active`, `reason_category`, `distribution_scope`, `primary_firm_name`, `firm_count`, `product_count`, `edit_event_count`, `has_been_edited`.
+`recall_event_id`, `source`, `source_recall_id`, `title`, `url`, `announced_at`, `published_at`, `classification`, `risk_level`, `lifecycle_status`, `is_active`, `reason_category`, `distribution_scope`, `primary_firm_name`, `firm_count`, `product_count`, `has_been_edited`.
 
 `GET /recalls/search` adds a computed `rank` column (`ts_rank_cd` over `search_vector`).
 
@@ -31,13 +31,15 @@ The `recalls-api` reads four dbt-materialized gold objects from the pipeline's N
 
 `GET /recalls/{source}/{recall_id}` selects the full row. Columns in addition to the list projection:
 
-`recall_reason`, `corrective_action`, `consequence_of_defect`, `distribution_states` (scalar text), `distribution_state_codes` (text[]), `distribution_country_codes` (text[]), `hazards` (jsonb), `product_upcs` (jsonb), `product_names`, `models`, `hins`, `firms` (jsonb), `first_seen_at`, `last_seen_at`, `edit_count`, `is_currently_active`, `was_ever_retracted`.
+`recall_reason`, `corrective_action`, `consequence_of_defect`, `distribution_states` (scalar text), `distribution_state_codes` (text[]), `distribution_country_codes` (text[]), `hazards` (jsonb), `product_upcs` (jsonb), `product_names`, `models`, `hins`, `firms` (jsonb).
+
+> **Pipeline-observability fields are no longer projected (audit Q2 / provenance prune).** The mart still carries `first_seen_at`, `last_seen_at`, `edit_count`, `edit_event_count`, `is_currently_active`, and `was_ever_retracted` for the pipeline's own observability, but the API stopped serving them: they implied authoritative agency semantics they lack, several were null for most sources, and `is_currently_active` was easily confused with the lifecycle `is_active`. `has_been_edited` is kept as the single honest "revised since first ingest" signal. See the [per-source provenance matrix](#per-source-field-provenance) for the kept fields.
 
 ### Product projection
 
-`GET /products/search` selects 19 columns from `mart_product_search` (`queries/products.py:_HIT_COLS`):
+`GET /products/search` selects 18 columns from `mart_product_search` (`queries/products.py:_HIT_COLS`):
 
-`recall_product_id`, `recall_event_id`, `source`, `source_recall_id`, `product_name`, `product_description`, `model`, `type`, `model_year`, `hin`, `upc` (all-null — see caveat below), `recall_title`, `classification`, `risk_level`, `published_at`, `url`, `is_active`, `firm_name`, `recall_product_upcs`. The FTS (`q=`) path also returns a computed `rank`.
+`recall_product_id`, `recall_event_id`, `source`, `source_recall_id`, `product_name`, `product_description`, `model`, `type`, `model_year`, `hin`, `recall_title`, `classification`, `risk_level`, `published_at`, `url`, `is_active`, `firm_name`, `recall_product_upcs`. The FTS (`q=`) path also returns a computed `rank`. (The mart's all-null per-product `upc` column is **not** projected — see the [caveat below](#recall-level-upc-arrays-vs-null-per-product-upc).)
 
 ---
 
@@ -84,6 +86,96 @@ An opaque cursor anchor generated per-source by the pipeline. Do not construct i
 | `FirmProfile` | `mart_firm_profile` | Full row; `firm_usda_attributes`, `firm_uscg_attributes`, `firm_fda_attributes` are JSON arrays of agency registration sidecars |
 
 See [api-reference.md](api-reference.md) for the per-endpoint field tables.
+
+---
+
+## Per-source field provenance
+
+Which of the five agency feeds populates each exposed field. This is the at-a-glance human view; the machine-readable per-field definitions live in the OpenAPI `description` strings (the SSOT), which carry the same `Sources: …` tag. Empirically verified against the gold coverage audit (`provenance-analysis-2026-06-17.md`).
+
+**Legend:** **Y** = the source populates this field with meaningful data · **–** = structurally null/empty for this source by construction · **n/a** = source-independent (synthesized, derived, or computed at query time — not attributable to one agency).
+
+### `mart_recall_summary` — `RecallSummary` (list) & `RecallDetail` (detail)
+
+| Field | CPSC | FDA | USDA | NHTSA | USCG | Notes |
+|---|---|---|---|---|---|---|
+| `recall_event_id` | Y | Y | Y | Y | Y | synthesized md5 PK |
+| `source` | Y | Y | Y | Y | Y | closed enum discriminator |
+| `source_recall_id` | Y | Y | Y | Y | Y | agency-native; FDA = RECALLEVENTID |
+| `title` | Y | Y | Y | Y | Y | native CPSC/USDA; synthesized FDA/NHTSA/USCG |
+| `url` | Y | – | Y | – | Y | FDA/NHTSA carry no per-recall URL |
+| `announced_at` | Y | Y | Y | Y | Y | ~20 FDA events null (≥1940 guard) |
+| `published_at` | Y | Y | Y | Y | Y | coalesced, NOT NULL, the sort key |
+| `classification` | – | Y | Y | – | Y | native vocabularies, NOT normalized |
+| `risk_level` | – | – | Y | – | – | USDA-only, derived from classification |
+| `lifecycle_status` | – | Y | Y | – | Y | native vocabularies, NOT normalized |
+| `is_active` | – | Y | Y | – | Y | tri-state; null = CPSC+NHTSA |
+| `reason_category` | – | – | Y | – | – | USDA FSIS taxonomy |
+| `recall_reason` | Y | Y | Y | Y | Y | free-text narrative |
+| `corrective_action` | – | – | – | Y | – | NHTSA-only |
+| `consequence_of_defect` | – | – | – | Y | – | NHTSA-only |
+| `distribution_scope` | Y | Y | Y | Y | Y | conformed enum; CPSC/USCG/NHTSA are policy defaults |
+| `distribution_states` | – | – | Y | – | – | USDA raw CSV scalar |
+| `distribution_state_codes` | – | Y | Y | – | – | parsed USPS codes (FDA free-text + USDA list) |
+| `distribution_country_codes` | – | Y | – | – | – | FDA-only in practice (foreign-only; US excluded) |
+| `hazards` | Y | – | – | – | – | CPSC jsonb array |
+| `product_upcs` | Y | – | – | – | – | CPSC-only, sparse (~5%) |
+| `primary_firm_name` | Y | Y | Y | Y | Y | role-priority pick from the firm rollup |
+| `firm_count` | Y | Y | Y | Y | Y | distinct firms |
+| `firms` | Y | Y | Y | Y | Y | one element per (firm, role) |
+| `product_count` | Y | Y | Y | Y | Y | USDA/USCG always 1 |
+| `product_names` | Y | Y | Y | Y | Y | cross-source alias (desc/title/component) |
+| `models` | – | – | – | Y | – | NHTSA MODELTXT only † |
+| `hins` | – | – | – | – | Y | USCG Hull IDs |
+| `has_been_edited` | n/a | n/a | n/a | n/a | n/a | synthesized edit-detection flag |
+
+### `mart_product_search` — `ProductSearchHit`
+
+| Field | CPSC | FDA | USDA | NHTSA | USCG | Notes |
+|---|---|---|---|---|---|---|
+| `recall_product_id` | Y | Y | Y | Y | Y | per-source md5 surrogate |
+| `recall_event_id` | Y | Y | Y | Y | Y | parent-event md5 |
+| `source` | Y | Y | Y | Y | Y | enum discriminator |
+| `source_recall_id` | Y | Y | Y | Y | Y | FDA = productid (product-grain) |
+| `product_name` | Y | Y | Y | Y | Y | cross-source alias |
+| `product_description` | – | Y | Y | Y | Y | null for CPSC † |
+| `model` | – | – | – | Y | – | NHTSA MODELTXT only † |
+| `type` | Y | Y | Y | Y | Y | source-specific vocabularies, NOT harmonized |
+| `model_year` | – | – | – | Y | Y | vehicle/vessel sources |
+| `hin` | – | – | – | – | Y | USCG Hull IDs |
+| `recall_title` | Y | Y | Y | Y | Y | from `mart_recall_summary.title` |
+| `classification` | – | Y | Y | – | Y | from `mart_recall_summary` |
+| `risk_level` | – | – | Y | – | – | from `mart_recall_summary` |
+| `published_at` | Y | Y | Y | Y | Y | from `mart_recall_summary` |
+| `url` | Y | – | Y | – | Y | from `mart_recall_summary` |
+| `is_active` | – | Y | Y | – | Y | from `mart_recall_summary` |
+| `firm_name` | Y | Y | Y | Y | Y | = `primary_firm_name` |
+| `recall_product_upcs` | Y | – | – | – | – | CPSC-only, recall-level; the real UPC-search path |
+
+`rank` (query-time `ts_rank_cd`) and `upc_is_recall_level` (constant `True`) are source-independent (n/a).
+
+### `mart_firm_profile` — `FirmProfile`
+
+| Field | CPSC | FDA | USDA | NHTSA | USCG | Notes |
+|---|---|---|---|---|---|---|
+| `firm_id` | Y | Y | Y | Y | Y | derived cross-source cluster key |
+| `canonical_name` | Y | Y | Y | Y | Y | representative display name |
+| `normalized_name` | Y | Y | Y | Y | Y | upper(trim()) of the representative, NOT unique |
+| `observed_names` | Y | Y | Y | Y | Y | raw spellings collapsed together |
+| `observed_company_ids` | – | Y | Y | – | Y | FDA FEI / USDA establishment number / USCG MIC |
+| `alternate_names` | n/a | n/a | n/a | n/a | n/a | derived enrichment (firm crosswalk) |
+| `total_recalls` | Y | Y | Y | Y | Y | distinct recalls, cross-source |
+| `active_recalls` | – | Y | Y | – | Y | only FDA/USDA/USCG can be active |
+| `first_recall_at` | Y | Y | Y | Y | Y | min(published_at) |
+| `last_recall_at` | Y | Y | Y | Y | Y | max(published_at) |
+| `roles` | Y | Y | Y | Y | Y | distinct roles |
+| `recalls_by_source` | Y | Y | Y | Y | Y | sparse {source → count} object |
+| `distinct_products` | Y | Y | Y | Y | Y | per-firm footprint (NOT global-distinct) |
+| `firm_usda_attributes` | – | – | Y | – | – | USDA FSIS establishment sidecar |
+| `firm_uscg_attributes` | – | – | – | – | Y | USCG MIC directory sidecar |
+| `firm_fda_attributes` | – | Y | – | – | – | FDA FEI sidecar |
+
+> **† Empty-string normalization.** The pipeline NULLs every free-text `''` (a source's "absent" marker) in silver, so `model` and `product_description` are now NHTSA-only / null-for-CPSC: CPSC supplies an empty string for these per-product fields, which the silver `nullif(trim(...), '')` converts to NULL (and the gold not-null rollup filter then drops). Before this normalization CPSC contributed a literal `""`. The matrix above reflects the post-normalization end state. See the [empty-string root cause](#empty-string-vs-null-for-free-text-fields) below.
 
 ---
 
@@ -136,7 +228,7 @@ This is a deliberate modeling choice (pipeline ADR 0036 D2 rejected a unified en
 
 ### Recall-level UPC arrays vs. null per-product `upc`
 
-The per-product `upc` column in `mart_product_search` is NULL for every row today — product-grain UPC extraction is not yet implemented in the pipeline. Recall-level UPCs (a recall-wide array, not per-product) are populated in `mart_recall_summary.product_upcs` and surfaced in `mart_product_search.recall_product_upcs`.
+The per-product `upc` column in `mart_product_search` is NULL for every row today — product-grain UPC extraction is not yet implemented in the pipeline. Because it carries no information, the API **no longer projects it** (audit A9); the column remains in the gold mart as a forward-looking placeholder. Recall-level UPCs (a recall-wide array, not per-product) are populated in `mart_recall_summary.product_upcs` and surfaced in `mart_product_search.recall_product_upcs`.
 
 `GET /products/search?upc=` therefore runs JSONB containment on `recall_product_upcs`. A match means a recall lists that UPC at the recall level. A miss means no recall lists that UPC — not necessarily that the product was never recalled. The `upc_is_recall_level: true` field in `ProductSearchHit` signals this explicitly.
 
@@ -149,3 +241,14 @@ Country codes are intentionally foreign-only. `US` is excluded because nationwid
 ### No fuzzy or typo-tolerant search
 
 `pg_trgm` is not available on the Neon serverless instance (confirmed; pipeline ADR 0037 moved firm fuzzy-resolution to a Python stage for the same reason). Both `GET /recalls/search` and `GET /products/search` use `websearch_to_tsquery('english', ...)` — token and prefix matching only. A misspelled term returns zero results.
+
+### Empty-string vs NULL for free-text fields
+
+Several agencies emit an empty string (`''`) — not NULL — when a free-text field has no value. The silver layer normalizes these to NULL with `nullif(trim(...), '')` so "absent" is represented one way (NULL) everywhere, and the gold not-null rollup filters then drop them from the jsonb arrays.
+
+The visible consequence in the API contract is two fields that are effectively NHTSA-only:
+
+- **`model`** (`ProductSearchHit.model`, `RecallDetail.models[]`) — CPSC's `Products[].Model` is empty at source, so after normalization `model` is populated only by NHTSA (`MODELTXT`). Before normalization CPSC contributed a literal `""` that survived the not-null filter.
+- **`product_description`** (`ProductSearchHit.product_description`) — CPSC's per-product description is empty at source, so after normalization it is null for CPSC and populated by FDA/USDA/NHTSA/USCG.
+
+Other free-text fields (`product_name`, `type`, `recall_reason`, `corrective_action`, `consequence_of_defect`) also have blanks normalized to NULL, but those sources still carry real values for most rows, so their per-source provenance is unchanged. This normalization is upstream (pipeline silver models); the API contract above describes the post-normalization end state.

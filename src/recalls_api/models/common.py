@@ -5,9 +5,24 @@ and the health models. Resource models (recalls/products/firms) live in sibling 
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
+
+
+def flatten_upcs(v: Any) -> Any:
+    """Normalize a gold UPC array to plain strings.
+
+    Gold stores recall-level UPCs as an array of objects — ``[{"upc": "012345678905"}]`` (lowercase
+    key) — not bare strings. This unwraps each ``{"upc": x}`` element to ``x`` so the response field
+    stays ``list[str]``. Tolerant of the future flattened shape (bare strings pass through) and of a
+    NULL array (-> ``[]``), so it is safe across the pending cross-repo gold change.
+    """
+    if v is None:
+        return []
+    if isinstance(v, list):
+        return [e["upc"] if isinstance(e, dict) and "upc" in e else e for e in v]
+    return v
 
 
 class Source(StrEnum):
@@ -47,12 +62,24 @@ class FirmRef(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
-    firm_id: str = Field(examples=["7d2c1e5b8a40f0a9f4c7e3a1e3a1c6f2"])
-    name: str = Field(examples=["Acme Corporation"])
+    firm_id: str = Field(
+        examples=["7d2c1e5b8a40f0a9f4c7e3a1e3a1c6f2"],
+        description="Canonical firm cluster id; use with GET /firms/{firm_id}.",
+    )
+    name: str = Field(examples=["Acme Corporation"], description="Canonical (cleaned) firm name.")
     # role / match_confidence are closed UPSTREAM but surfaced as free strings: the API does not let
     # clients filter on them and must not break if the pipeline adds a value.
-    role: str = Field(examples=["manufacturer"])
-    match_confidence: str = Field(examples=["exact_name"])
+    role: str = Field(
+        examples=["manufacturer"],
+        description=(
+            "Role this firm played on the recall (manufacturer/importer/distributor for CPSC, "
+            "establishment for FDA/USDA, filer/manufacturer for NHTSA, manufacturer for USCG)."
+        ),
+    )
+    match_confidence: str = Field(
+        examples=["exact_name"],
+        description="Firm-resolution path/quality for this link (e.g. exact_name, fei_exact).",
+    )
 
 
 class Health(BaseModel):

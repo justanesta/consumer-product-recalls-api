@@ -3,7 +3,7 @@
   "info": {
     "title": "Consumer Product Recalls API",
     "description": "Open, read-only API over the consumer product recalls gold marts (CPSC, FDA, USDA, NHTSA, USCG). Honest caveats: `is_active` is tri-state (CPSC/NHTSA carry no status -> null); `classification` is source-native and not comparable across sources; UPC search matches recall-level UPC arrays, not per-product UPC; there is no fuzzy/typo search.",
-    "version": "0.1.0"
+    "version": "0.1.1"
   },
   "paths": {
     "/health": {
@@ -66,7 +66,7 @@
           "recalls"
         ],
         "summary": "List recalls (newest first), with filters and keyset pagination.",
-        "description": "Recalls across CPSC, FDA, USDA, NHTSA, USCG, newest first (`published_at DESC`), keyset (seek) paginated — pass the previous page's `next_cursor` back as `cursor`. Filters AND together: `source`, `classification`, `is_active`, `lifecycle_status`, `distribution_scope`, `distribution_state`, `distribution_country`, `source_recall_id`, `firm`, plus the `published_*` and `announced_*` date ranges. Caveats: `classification`/`lifecycle_status` are source-native (not unified); `is_active`/`lifecycle_status` are null for CPSC/NHTSA (a value filter excludes those rows); `announced_at` is nullable (an `announced_*` filter drops rows lacking it); `distribution_state`/`distribution_country` are FDA/USDA-only and `distribution_country` is foreign-only (`US` excluded by design); `source_recall_id` is exact, unique only with `source` (use the detail route); `firm` is an unindexed substring filter. Total is omitted unless `with_total=true`.",
+        "description": "Recalls across CPSC, FDA, USDA, NHTSA, USCG, newest first (`published_at DESC`), keyset (seek) paginated — pass the previous page's `next_cursor` back as `cursor`. Filters AND together: `source`, `classification`, `is_active`, `lifecycle_status`, `distribution_scope`, `distribution_state`, `distribution_country`, `source_recall_id`, `firm`, plus the `published_*` and `announced_*` date ranges. The categorical filters (`source`, `classification`, `lifecycle_status`, `distribution_scope`, `distribution_state`, `distribution_country`) accept multiple values — repeat the param or comma-separate (`?source=CPSC,FDA`) for any-of (OR) within a field; different fields still AND. Caveats: `classification`/`lifecycle_status` are source-native (not unified); `is_active`/`lifecycle_status` are null for CPSC/NHTSA (a value filter excludes those rows); `announced_at` is nullable (an `announced_*` filter drops rows lacking it); `distribution_state`/`distribution_country` are FDA/USDA-only and `distribution_country` is foreign-only (`US` excluded by design); `source_recall_id` is exact, unique only with `source` (use the detail route); `firm` is an unindexed substring filter. Total is omitted unless `with_total=true`.",
         "operationId": "list_recalls_recalls_get",
         "parameters": [
           {
@@ -76,16 +76,19 @@
             "schema": {
               "anyOf": [
                 {
-                  "$ref": "#/components/schemas/Source"
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Source"
+                  }
                 },
                 {
                   "type": "null"
                 }
               ],
-              "description": "Filter by issuing agency.",
+              "description": "Issuing agency; repeat or comma-separate for any-of (OR).",
               "title": "Source"
             },
-            "description": "Filter by issuing agency."
+            "description": "Issuing agency; repeat or comma-separate for any-of (OR)."
           },
           {
             "name": "classification",
@@ -94,17 +97,20 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string",
-                  "maxLength": 64
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "maxLength": 64
+                  }
                 },
                 {
                   "type": "null"
                 }
               ],
-              "description": "EXACT match on the source-native classification string.",
+              "description": "EXACT source-native classification(s); repeat/comma-separate for any-of.",
               "title": "Classification"
             },
-            "description": "EXACT match on the source-native classification string."
+            "description": "EXACT source-native classification(s); repeat/comma-separate for any-of."
           },
           {
             "name": "is_active",
@@ -177,10 +183,10 @@
                   "type": "null"
                 }
               ],
-              "description": "Case-insensitive substring (unindexed).",
+              "description": "Case-insensitive substring on the recall's PRIMARY firm name only (not secondary/co-recalled firms); unindexed.",
               "title": "Firm"
             },
-            "description": "Case-insensitive substring (unindexed)."
+            "description": "Case-insensitive substring on the recall's PRIMARY firm name only (not secondary/co-recalled firms); unindexed."
           },
           {
             "name": "distribution_scope",
@@ -189,16 +195,19 @@
             "schema": {
               "anyOf": [
                 {
-                  "$ref": "#/components/schemas/DistributionScope"
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DistributionScope"
+                  }
                 },
                 {
                   "type": "null"
                 }
               ],
-              "description": "One of the 4 gold distribution scopes (validated; 422 otherwise).",
+              "description": "Gold distribution scope(s); repeat/comma-separate for any-of (422 on a bad value).",
               "title": "Distribution Scope"
             },
-            "description": "One of the 4 gold distribution scopes (validated; 422 otherwise)."
+            "description": "Gold distribution scope(s); repeat/comma-separate for any-of (422 on a bad value)."
           },
           {
             "name": "lifecycle_status",
@@ -207,17 +216,20 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string",
-                  "maxLength": 64
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "maxLength": 64
+                  }
                 },
                 {
                   "type": "null"
                 }
               ],
-              "description": "EXACT match; source-native, null for CPSC/NHTSA (excludes those rows).",
+              "description": "EXACT source-native status(es); repeat/comma-separate for any-of. Null for CPSC/NHTSA (excludes those rows).",
               "title": "Lifecycle Status"
             },
-            "description": "EXACT match; source-native, null for CPSC/NHTSA (excludes those rows)."
+            "description": "EXACT source-native status(es); repeat/comma-separate for any-of. Null for CPSC/NHTSA (excludes those rows)."
           },
           {
             "name": "announced_after",
@@ -284,18 +296,21 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string",
-                  "minLength": 2,
-                  "maxLength": 2
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 2
+                  }
                 },
                 {
                   "type": "null"
                 }
               ],
-              "description": "USPS 2-letter code; recalls distributed to this state (FDA/USDA only).",
+              "description": "USPS 2-letter code(s); recalls distributed to ANY (FDA/USDA only). Repeat/comma-separate for any-of.",
               "title": "Distribution State"
             },
-            "description": "USPS 2-letter code; recalls distributed to this state (FDA/USDA only)."
+            "description": "USPS 2-letter code(s); recalls distributed to ANY (FDA/USDA only). Repeat/comma-separate for any-of."
           },
           {
             "name": "distribution_country",
@@ -304,18 +319,21 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string",
-                  "minLength": 2,
-                  "maxLength": 2
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 2
+                  }
                 },
                 {
                   "type": "null"
                 }
               ],
-              "description": "ISO alpha-2; FOREIGN distribution only ('US' excluded by design).",
+              "description": "ISO alpha-2 code(s); FOREIGN distribution only ('US' excluded by design). Repeat/comma-separate for any-of.",
               "title": "Distribution Country"
             },
-            "description": "ISO alpha-2; FOREIGN distribution only ('US' excluded by design)."
+            "description": "ISO alpha-2 code(s); FOREIGN distribution only ('US' excluded by design). Repeat/comma-separate for any-of."
           },
           {
             "name": "limit",
@@ -445,16 +463,19 @@
             "schema": {
               "anyOf": [
                 {
-                  "$ref": "#/components/schemas/Source"
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Source"
+                  }
                 },
                 {
                   "type": "null"
                 }
               ],
-              "description": "Filter by issuing agency.",
+              "description": "Issuing agency; repeat or comma-separate for any-of (OR).",
               "title": "Source"
             },
-            "description": "Filter by issuing agency."
+            "description": "Issuing agency; repeat or comma-separate for any-of (OR)."
           },
           {
             "name": "classification",
@@ -463,17 +484,20 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string",
-                  "maxLength": 64
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "maxLength": 64
+                  }
                 },
                 {
                   "type": "null"
                 }
               ],
-              "description": "EXACT match on the source-native classification string.",
+              "description": "EXACT source-native classification(s); repeat/comma-separate for any-of.",
               "title": "Classification"
             },
-            "description": "EXACT match on the source-native classification string."
+            "description": "EXACT source-native classification(s); repeat/comma-separate for any-of."
           },
           {
             "name": "is_active",
@@ -546,10 +570,10 @@
                   "type": "null"
                 }
               ],
-              "description": "Case-insensitive substring (unindexed).",
+              "description": "Case-insensitive substring on the recall's PRIMARY firm name only (not secondary/co-recalled firms); unindexed.",
               "title": "Firm"
             },
-            "description": "Case-insensitive substring (unindexed)."
+            "description": "Case-insensitive substring on the recall's PRIMARY firm name only (not secondary/co-recalled firms); unindexed."
           },
           {
             "name": "distribution_scope",
@@ -558,16 +582,19 @@
             "schema": {
               "anyOf": [
                 {
-                  "$ref": "#/components/schemas/DistributionScope"
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DistributionScope"
+                  }
                 },
                 {
                   "type": "null"
                 }
               ],
-              "description": "One of the 4 gold distribution scopes (validated; 422 otherwise).",
+              "description": "Gold distribution scope(s); repeat/comma-separate for any-of (422 on a bad value).",
               "title": "Distribution Scope"
             },
-            "description": "One of the 4 gold distribution scopes (validated; 422 otherwise)."
+            "description": "Gold distribution scope(s); repeat/comma-separate for any-of (422 on a bad value)."
           },
           {
             "name": "lifecycle_status",
@@ -576,17 +603,20 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string",
-                  "maxLength": 64
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "maxLength": 64
+                  }
                 },
                 {
                   "type": "null"
                 }
               ],
-              "description": "EXACT match; source-native, null for CPSC/NHTSA (excludes those rows).",
+              "description": "EXACT source-native status(es); repeat/comma-separate for any-of. Null for CPSC/NHTSA (excludes those rows).",
               "title": "Lifecycle Status"
             },
-            "description": "EXACT match; source-native, null for CPSC/NHTSA (excludes those rows)."
+            "description": "EXACT source-native status(es); repeat/comma-separate for any-of. Null for CPSC/NHTSA (excludes those rows)."
           },
           {
             "name": "announced_after",
@@ -653,18 +683,21 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string",
-                  "minLength": 2,
-                  "maxLength": 2
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 2
+                  }
                 },
                 {
                   "type": "null"
                 }
               ],
-              "description": "USPS 2-letter code; recalls distributed to this state (FDA/USDA only).",
+              "description": "USPS 2-letter code(s); recalls distributed to ANY (FDA/USDA only). Repeat/comma-separate for any-of.",
               "title": "Distribution State"
             },
-            "description": "USPS 2-letter code; recalls distributed to this state (FDA/USDA only)."
+            "description": "USPS 2-letter code(s); recalls distributed to ANY (FDA/USDA only). Repeat/comma-separate for any-of."
           },
           {
             "name": "distribution_country",
@@ -673,18 +706,21 @@
             "schema": {
               "anyOf": [
                 {
-                  "type": "string",
-                  "minLength": 2,
-                  "maxLength": 2
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 2
+                  }
                 },
                 {
                   "type": "null"
                 }
               ],
-              "description": "ISO alpha-2; FOREIGN distribution only ('US' excluded by design).",
+              "description": "ISO alpha-2 code(s); FOREIGN distribution only ('US' excluded by design). Repeat/comma-separate for any-of.",
               "title": "Distribution Country"
             },
-            "description": "ISO alpha-2; FOREIGN distribution only ('US' excluded by design)."
+            "description": "ISO alpha-2 code(s); FOREIGN distribution only ('US' excluded by design). Repeat/comma-separate for any-of."
           },
           {
             "name": "limit",
@@ -879,7 +915,7 @@
           "products"
         ],
         "summary": "Search recalled products by keyword (full-text) or exact identifier.",
-        "description": "Searches recalled products. Keyword (`q`) is a Postgres full-text search over product name, description, recall title, and firm name, ranked by relevance (`rank`); token/prefix matching only, NO fuzzy/typo search. Identifier (`hin`, `model`) are exact matches. `upc` is matched at the RECALL level via containment (the per-product UPC field is empty), so each hit carries `upc_is_recall_level: true` — a miss means no recall lists that UPC, not that the product was never recalled. Supply at least one of q, hin, model, upc (else 422). Precedence when several given: q > hin/model > upc; source AND-s any path.",
+        "description": "Searches recalled products. Keyword (`q`) is a Postgres full-text search over product name, description, recall title, and firm name, ranked by relevance (`rank`); token/prefix matching only, NO fuzzy/typo search. Identifier (`hin`, `model`) are exact matches. `upc` is matched at the RECALL level via containment (the per-product UPC field is empty), so each hit carries `upc_is_recall_level: true` — a miss means no recall lists that UPC, not that the product was never recalled. Supply at least one of q, hin, model, upc (else 422). Precedence when several given: q > hin/model > upc. `source` AND-s any path and accepts multiple values (repeat or comma-separate) for any-of (OR).",
         "operationId": "search_products_products_search_get",
         "parameters": [
           {
@@ -966,16 +1002,19 @@
             "schema": {
               "anyOf": [
                 {
-                  "$ref": "#/components/schemas/Source"
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Source"
+                  }
                 },
                 {
                   "type": "null"
                 }
               ],
-              "description": "Optional source filter, AND-ed.",
+              "description": "Optional source filter, AND-ed; repeat/comma-separate for any-of (OR).",
               "title": "Source"
             },
-            "description": "Optional source filter, AND-ed."
+            "description": "Optional source filter, AND-ed; repeat/comma-separate for any-of (OR)."
           },
           {
             "name": "limit",
@@ -1368,48 +1407,56 @@
         "properties": {
           "firm_id": {
             "type": "string",
-            "title": "Firm Id"
+            "title": "Firm Id",
+            "description": "Synthetic primary key of the canonical firm (a cross-source cluster). Derived from the firm-resolution crosswalk, falling back to md5(normalized name). One row per canonical firm across all agencies. Sources: derived (all five contribute names)."
           },
           "canonical_name": {
             "type": "string",
             "title": "Canonical Name",
+            "description": "Human-readable display name of the canonical firm — the cluster's resolved name, or the representative raw firm name when unclustered. Not an authoritative legal name. Sources: all five.",
             "examples": [
               "Acme Foods Inc"
             ]
           },
           "normalized_name": {
             "type": "string",
-            "title": "Normalized Name"
+            "title": "Normalized Name",
+            "description": "Upper-cased, whitespace-trimmed form of the firm's representative name for case-insensitive lookup. NOT a unique key (firm_id is the key). Sources: all five."
           },
           "observed_names": {
             "items": {
               "type": "string"
             },
             "type": "array",
-            "title": "Observed Names"
+            "title": "Observed Names",
+            "description": "JSONB array of all distinct raw firm-name surface forms (across sources and spellings) that map to this canonical firm — the provenance/audit trail of names collapsed together. Always >=1 element. Sources: all five."
           },
           "observed_company_ids": {
             "items": {
               "type": "string"
             },
             "type": "array",
-            "title": "Observed Company Ids"
+            "title": "Observed Company Ids",
+            "description": "JSONB array of distinct structured firm identifiers observed for this firm: FDA FEI numbers, USDA FSIS establishment numbers, and USCG MICs. Also the join key to the three sidecars. Sources: FDA, USDA, USCG (empty for firms seen only via CPSC/NHTSA, which carry no usable firm id)."
           },
           "alternate_names": {
             "items": {
               "type": "string"
             },
             "type": "array",
-            "title": "Alternate Names"
+            "title": "Alternate Names",
+            "description": "JSONB array of brand/DBA surface-form aliases (e.g. 'John Deere' for 'Deere & Company (John Deere)'), derived by the firm-resolution step for search and fuzzy matching. Empty when the firm has no aliases. Sources: derived (not a per-agency field)."
           },
           "total_recalls": {
             "type": "integer",
             "title": "Total Recalls",
+            "description": "Total distinct recalls this firm is linked to, across all sources it appears in (a firm in multiple roles on one recall counts once). Always present. Sources: all five.",
             "default": 0
           },
           "active_recalls": {
             "type": "integer",
             "title": "Active Recalls",
+            "description": "Count of this firm's distinct currently-active recalls. Only FDA, USDA, and USCG recalls can be active; CPSC and NHTSA have no lifecycle (is_active null) and never count. Always present (0 if none). Sources counted: FDA, USDA, USCG.",
             "default": 0
           },
           "first_recall_at": {
@@ -1422,7 +1469,8 @@
                 "type": "null"
               }
             ],
-            "title": "First Recall At"
+            "title": "First Recall At",
+            "description": "Earliest recall publication timestamp for this firm (min of published_at — a per-source 'last published / record-created' date, not a uniform announcement date). Null only for a firm with no linked recall. Sources: all five."
           },
           "last_recall_at": {
             "anyOf": [
@@ -1434,14 +1482,16 @@
                 "type": "null"
               }
             ],
-            "title": "Last Recall At"
+            "title": "Last Recall At",
+            "description": "Most recent recall publication timestamp for this firm (max of published_at; same per-source caveat as first_recall_at). Null only for a firm with no linked recall. Sources: all five."
           },
           "roles": {
             "items": {
               "type": "string"
             },
             "type": "array",
-            "title": "Roles"
+            "title": "Roles",
+            "description": "Distinct roles this firm has played across its recalls: manufacturer, importer, distributor (CPSC), establishment (FDA/USDA), filer/manufacturer (NHTSA), manufacturer (USCG). Sources: all five."
           },
           "recalls_by_source": {
             "additionalProperties": {
@@ -1449,6 +1499,7 @@
             },
             "type": "object",
             "title": "Recalls By Source",
+            "description": "JSONB object mapping source -> distinct recall count for this firm (e.g. {'NHTSA': 12, 'CPSC': 3}). Only sources where the firm has >=1 recall appear as keys, and the values sum to total_recalls. Sources: all five.",
             "examples": [
               {
                 "FDA": 2,
@@ -1459,6 +1510,7 @@
           "distinct_products": {
             "type": "integer",
             "title": "Distinct Products",
+            "description": "Total distinct recalled-product rows across all recalls this firm is associated with, in any role (a per-firm footprint, NOT a global distinct — a product on a multi-firm recall is counted under each firm). Never null. Sources: all five.",
             "default": 0
           },
           "firm_usda_attributes": {
@@ -1466,21 +1518,24 @@
               "$ref": "#/components/schemas/UsdaEstablishment"
             },
             "type": "array",
-            "title": "Firm Usda Attributes"
+            "title": "Firm Usda Attributes",
+            "description": "USDA FSIS establishment attributes — a JSON array of one block per matched FSIS establishment number (name, address, regulatory metadata, grant dates). Empty for non-USDA firms. Sources: USDA only."
           },
           "firm_uscg_attributes": {
             "items": {
               "$ref": "#/components/schemas/UscgManufacturer"
             },
             "type": "array",
-            "title": "Firm Uscg Attributes"
+            "title": "Firm Uscg Attributes",
+            "description": "USCG boat-manufacturer directory attributes — a JSON array of one block per USCG Manufacturer Identification Code (MIC) the firm is registered under (company name, address, status, succession lineage, MIC-recycle flags). Empty for non-USCG firms. Sources: USCG only."
           },
           "firm_fda_attributes": {
             "items": {
               "$ref": "#/components/schemas/FdaAttributes"
             },
             "type": "array",
-            "title": "Firm Fda Attributes"
+            "title": "Firm Fda Attributes",
+            "description": "FDA establishment attributes — a JSON array of one block per FDA FEI the firm clusters under (legal name, address at time of recall, firm-succession signal). Empty for non-FDA firms. Sources: FDA only."
           }
         },
         "type": "object",
@@ -1497,6 +1552,7 @@
           "firm_id": {
             "type": "string",
             "title": "Firm Id",
+            "description": "Canonical firm cluster id; use with GET /firms/{firm_id}.",
             "examples": [
               "7d2c1e5b8a40f0a9f4c7e3a1e3a1c6f2"
             ]
@@ -1504,6 +1560,7 @@
           "name": {
             "type": "string",
             "title": "Name",
+            "description": "Canonical (cleaned) firm name.",
             "examples": [
               "Acme Corporation"
             ]
@@ -1511,6 +1568,7 @@
           "role": {
             "type": "string",
             "title": "Role",
+            "description": "Role this firm played on the recall (manufacturer/importer/distributor for CPSC, establishment for FDA/USDA, filer/manufacturer for NHTSA, manufacturer for USCG).",
             "examples": [
               "manufacturer"
             ]
@@ -1518,6 +1576,7 @@
           "match_confidence": {
             "type": "string",
             "title": "Match Confidence",
+            "description": "Firm-resolution path/quality for this link (e.g. exact_name, fei_exact).",
             "examples": [
               "exact_name"
             ]
@@ -1719,18 +1778,22 @@
         "properties": {
           "recall_product_id": {
             "type": "string",
-            "title": "Recall Product Id"
+            "title": "Recall Product Id",
+            "description": "Stable surrogate primary key for one recalled product line, reused verbatim from silver (md5, unique, never null). Also the keyset cursor anchor. Sources: all five."
           },
           "recall_event_id": {
             "type": "string",
-            "title": "Recall Event Id"
+            "title": "Recall Event Id",
+            "description": "Surrogate key of the parent recall event (md5; joins to GET /recalls/{source}/{recall_id}). Many products can share one event for CPSC/FDA/NHTSA; 1:1 for USDA/USCG. Sources: all five."
           },
           "source": {
-            "$ref": "#/components/schemas/Source"
+            "$ref": "#/components/schemas/Source",
+            "description": "Originating data source: CPSC, FDA, USDA, NHTSA, USCG. Always populated."
           },
           "source_recall_id": {
             "type": "string",
-            "title": "Source Recall Id"
+            "title": "Source Recall Id",
+            "description": "Source-native recall identifier, paired with source for the public natural key. Recall-grain for CPSC/USDA/NHTSA/USCG; for FDA it is the product id (product-grain) — the FDA recall-event id is recall_event_id. Always populated."
           },
           "product_name": {
             "anyOf": [
@@ -1741,7 +1804,8 @@
                 "type": "null"
               }
             ],
-            "title": "Product Name"
+            "title": "Product Name",
+            "description": "Product name for this recalled product. Source-dependent: CPSC = product name; USCG = boat model name; FDA = the product DESCRIPTION text; USDA = the recall TITLE; NHTSA = the COMPONENT description. May be null for some rows. Sources: all five."
           },
           "product_description": {
             "anyOf": [
@@ -1752,7 +1816,8 @@
                 "type": "null"
               }
             ],
-            "title": "Product Description"
+            "title": "Product Description",
+            "description": "Free-text description of the product. Source-dependent: FDA = the product description (same value as product_name); USDA = the product-items blob (~40% null); NHTSA = the component description; USCG = a short defect/problem note (~25 chars). Sources: FDA, USDA, NHTSA, USCG (null for CPSC, whose per-product description is absent at source)."
           },
           "model": {
             "anyOf": [
@@ -1763,7 +1828,8 @@
                 "type": "null"
               }
             ],
-            "title": "Model"
+            "title": "Model",
+            "description": "Product model identifier for exact-match lookup (btree-indexed). Populated only for NHTSA (MODELTXT, e.g. 'F-150'); null for CPSC, FDA, USDA, USCG (USCG's boat name is in product_name). Sources: NHTSA only."
           },
           "type": {
             "anyOf": [
@@ -1775,6 +1841,7 @@
               }
             ],
             "title": "Type",
+            "description": "Source-specific product category code/label (NOT harmonized across sources): FDA = commodity (Devices/Food/Drugs/Veterinary/Biologics/Cosmetics); USDA = FSIS processing category; NHTSA = recall-type code (V/T/E/C/I/X); USCG = a numeric boat-type code; CPSC = a free-text product type. Compare only within a single source; null where the source provides no type. Sources: all five.",
             "examples": [
               "Frozen ready-to-eat"
             ]
@@ -1792,6 +1859,7 @@
               }
             ],
             "title": "Model Year",
+            "description": "Model year of the recalled item (text). Populated only for NHTSA (YEARTXT, with the '9999' sentinel nulled) and USCG (varied formats; ~32% null); null for CPSC, FDA, USDA. Kept as text because USCG values are not uniformly numeric. Sources: NHTSA, USCG.",
             "examples": [
               2019
             ]
@@ -1805,19 +1873,8 @@
                 "type": "null"
               }
             ],
-            "title": "Hin"
-          },
-          "upc": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Upc",
-            "description": "Product-grain UPC; currently null for all rows."
+            "title": "Hin",
+            "description": "USCG Hull Identification Number for the recalled boat (the boating analog of a VIN/UPC; btree-indexed). USCG-only — null for CPSC, FDA, USDA, NHTSA; only ~54% of USCG products carry a real HIN. Sources: USCG only."
           },
           "recall_title": {
             "anyOf": [
@@ -1828,7 +1885,8 @@
                 "type": "null"
               }
             ],
-            "title": "Recall Title"
+            "title": "Recall Title",
+            "description": "Headline of the recall this product belongs to. Native title for CPSC/USDA; synthesized '<recall-id> — <firm/model>' for FDA/NHTSA/USCG. Always populated. Sources: all five."
           },
           "classification": {
             "anyOf": [
@@ -1839,7 +1897,8 @@
                 "type": "null"
               }
             ],
-            "title": "Classification"
+            "title": "Classification",
+            "description": "Recall severity/hazard classification in the source's native vocabulary (FDA 1/2/3, NC; USDA Class I/II/III, Public Health Alert; USCG H/L/M/S). NOT normalized across sources. Sources: FDA, USDA, USCG (null for CPSC/NHTSA)."
           },
           "risk_level": {
             "anyOf": [
@@ -1850,12 +1909,14 @@
                 "type": "null"
               }
             ],
-            "title": "Risk Level"
+            "title": "Risk Level",
+            "description": "USDA health-risk label derived 1:1 from the USDA classification (e.g. 'High - Class I'). Sources: USDA only (null for CPSC/FDA/NHTSA/USCG)."
           },
           "published_at": {
             "type": "string",
             "format": "date-time",
-            "title": "Published At"
+            "title": "Published At",
+            "description": "Publication / last-published timestamp of the recall (always present; the canonical sort key). Sources: all five."
           },
           "url": {
             "anyOf": [
@@ -1866,7 +1927,8 @@
                 "type": "null"
               }
             ],
-            "title": "Url"
+            "title": "Url",
+            "description": "Agency detail-page URL for the recall. Sources: CPSC, USDA, USCG (null for FDA/NHTSA)."
           },
           "is_active": {
             "anyOf": [
@@ -1877,7 +1939,8 @@
                 "type": "null"
               }
             ],
-            "title": "Is Active"
+            "title": "Is Active",
+            "description": "Conformed tri-state flag for whether the recall is still active (from the FDA/USDA/USCG lifecycle). Sources: FDA, USDA, USCG (null for CPSC/NHTSA)."
           },
           "firm_name": {
             "anyOf": [
@@ -1888,14 +1951,16 @@
                 "type": "null"
               }
             ],
-            "title": "Firm Name"
+            "title": "Firm Name",
+            "description": "Primary display firm for the recall — the canonical name of the highest-priority firm by role (manufacturer > establishment > filer > importer > distributor). May be null when no firm resolves. Sources: all five."
           },
           "recall_product_upcs": {
             "items": {
               "type": "string"
             },
             "type": "array",
-            "title": "Recall Product Upcs"
+            "title": "Recall Product Upcs",
+            "description": "Recall-level UPC codes (recall-event grain, denormalized onto each product row; this is what UPC search matches via containment). Gold stores them as [{upc:…}] objects; the API flattens to bare strings ([] when absent). Populated only for CPSC and sparse there (~5% of CPSC recalls); empty for FDA/USDA/NHTSA/USCG. Sources: CPSC only."
           },
           "rank": {
             "anyOf": [
@@ -1907,13 +1972,13 @@
               }
             ],
             "title": "Rank",
-            "description": "Relevance; present only for keyword (q) search."
+            "description": "Cover-density full-text relevance (ts_rank_cd over the product search_vector). Present only on the keyword (q) path; null for hin/model/upc lookups. Higher is more relevant, but scores are not comparable across queries. Computed per request, not stored. Source-independent."
           },
           "upc_is_recall_level": {
             "type": "boolean",
             "const": true,
             "title": "Upc Is Recall Level",
-            "description": "UPC matches are recall-level (recall_product_upcs), not product-grain.",
+            "description": "Constant True honesty flag: UPC search is recall-level (containment over recall_product_upcs, currently CPSC-sourced and sparse), not product-grain. The per-product upc column is null for every source. Always True; source-independent.",
             "default": true
           }
         },
@@ -1931,14 +1996,17 @@
         "properties": {
           "recall_event_id": {
             "type": "string",
-            "title": "Recall Event Id"
+            "title": "Recall Event Id",
+            "description": "Opaque surrogate id for one recall event, stable across re-extractions: md5('<SOURCE>|<source recall key>'), reused verbatim from silver (ADR 0038). Not a raw agency id — pair source with source_recall_id for the human-facing key. Sources: all five."
           },
           "source": {
-            "$ref": "#/components/schemas/Source"
+            "$ref": "#/components/schemas/Source",
+            "description": "Originating agency feed (closed enum): CPSC, FDA, USDA, NHTSA, USCG. Always populated."
           },
           "source_recall_id": {
             "type": "string",
-            "title": "Source Recall Id"
+            "title": "Source Recall Id",
+            "description": "Agency-native recall identifier; meaning varies by source — CPSC RecallNumber, FDA RECALLEVENTID, USDA field_recall_number (DDD-YYYY), NHTSA CAMPNO, USCG recall Number. Pair with source for global identity. Always populated."
           },
           "title": {
             "anyOf": [
@@ -1949,7 +2017,8 @@
                 "type": "null"
               }
             ],
-            "title": "Title"
+            "title": "Title",
+            "description": "Human-readable recall headline. Native title for CPSC/USDA; synthesized as '<recall-id> — <firm/model name>' for FDA/NHTSA/USCG (no native title). Effectively always populated."
           },
           "url": {
             "anyOf": [
@@ -1960,7 +2029,8 @@
                 "type": "null"
               }
             ],
-            "title": "Url"
+            "title": "Url",
+            "description": "Public detail-page URL for the recall. Sources: CPSC, USDA, USCG (null for FDA/NHTSA, which provide no per-recall detail URL)."
           },
           "announced_at": {
             "anyOf": [
@@ -1972,12 +2042,14 @@
                 "type": "null"
               }
             ],
-            "title": "Announced At"
+            "title": "Announced At",
+            "description": "Date the recall was first announced/initiated, conformed across all five sources. Nullable: ~20 FDA events lack a trustworthy initiation date. Use published_at when a guaranteed date is required. Sources: all five."
           },
           "published_at": {
             "type": "string",
             "format": "date-time",
-            "title": "Published At"
+            "title": "Published At",
+            "description": "Last-published/modified date, coalesced per source to always be present — the guaranteed sort/pagination key (contrast nullable announced_at). Sources: all five."
           },
           "classification": {
             "anyOf": [
@@ -1988,7 +2060,8 @@
                 "type": "null"
               }
             ],
-            "title": "Classification"
+            "title": "Classification",
+            "description": "Recall severity/hazard classification in the source's NATIVE vocabulary (FDA: 1/2/3, NC=Not Yet Classified; USDA: Class I/II/III, Public Health Alert; USCG: H/L/M/S). NOT normalized across sources. Sources: FDA, USDA, USCG (null for CPSC/NHTSA)."
           },
           "risk_level": {
             "anyOf": [
@@ -1999,7 +2072,8 @@
                 "type": "null"
               }
             ],
-            "title": "Risk Level"
+            "title": "Risk Level",
+            "description": "USDA health-risk label derived 1:1 from the USDA classification (e.g. 'High - Class I', 'Low - Class II', 'Marginal - Class III', 'Public Health Alert'). Sources: USDA only (null for CPSC/FDA/NHTSA/USCG)."
           },
           "lifecycle_status": {
             "anyOf": [
@@ -2010,7 +2084,8 @@
                 "type": "null"
               }
             ],
-            "title": "Lifecycle Status"
+            "title": "Lifecycle Status",
+            "description": "Recall lifecycle/status in the source's native vocabulary (FDA: Ongoing/Completed/Terminated; USDA: Active Recall/Closed Recall/Public Health Alert; USCG: Open/Closed). NOT normalized; see is_active for a conformed boolean. Sources: FDA, USDA, USCG (null for CPSC/NHTSA)."
           },
           "is_active": {
             "anyOf": [
@@ -2021,7 +2096,8 @@
                 "type": "null"
               }
             ],
-            "title": "Is Active"
+            "title": "Is Active",
+            "description": "Conformed tri-state flag for whether the recall is still active, derived from each source's lifecycle field (USDA Public Health Alert counts as active). Sources: FDA, USDA, USCG (null for CPSC/NHTSA, which have no lifecycle concept and so match neither true nor false)."
           },
           "reason_category": {
             "anyOf": [
@@ -2032,11 +2108,13 @@
                 "type": "null"
               }
             ],
-            "title": "Reason Category"
+            "title": "Reason Category",
+            "description": "Categorical recall-reason tokens from USDA's FSIS taxonomy (comma-joined, e.g. 'Unreported Allergens, Misbranding'). Sources: USDA only (null for CPSC/FDA/NHTSA/USCG, whose reasons are free text in recall_reason)."
           },
           "distribution_scope": {
             "type": "string",
-            "title": "Distribution Scope"
+            "title": "Distribution Scope",
+            "description": "Conformed distribution-breadth enum, always populated: Nationwide, International, Regional, or Unspecified. Classified from real distribution text for FDA/USDA; CPSC/USCG default to Unspecified and NHTSA to Nationwide. Sources: all five."
           },
           "primary_firm_name": {
             "anyOf": [
@@ -2047,26 +2125,25 @@
                 "type": "null"
               }
             ],
-            "title": "Primary Firm Name"
+            "title": "Primary Firm Name",
+            "description": "Primary display firm for the recall — the canonical firm name picked by role priority (manufacturer > establishment > filer > importer > distributor, then alphabetical). Null only if no firm resolves. Sources: all five."
           },
           "firm_count": {
             "type": "integer",
             "title": "Firm Count",
+            "description": "Count of DISTINCT firms linked to this recall across all roles (a firm in multiple roles counts once, so this may be less than len(firms)). 0 when no firm resolves. Sources: all five.",
             "default": 0
           },
           "product_count": {
             "type": "integer",
             "title": "Product Count",
-            "default": 0
-          },
-          "edit_event_count": {
-            "type": "integer",
-            "title": "Edit Event Count",
+            "description": "Number of distinct product rows for this recall. CPSC/FDA/NHTSA can exceed 1; USDA and USCG are always 1 (modeled one-product-per-recall). Never null. Sources: all five.",
             "default": 0
           },
           "has_been_edited": {
             "type": "boolean",
             "title": "Has Been Edited",
+            "description": "True if the pipeline has detected at least one editorially-meaningful change to a tracked event field (recall_reason, classification, lifecycle_status, title, terminated_at) by diffing consecutive bronze snapshots; false otherwise. Observed-edit evidence, NOT a flag of an official agency amendment — cosmetic/whitespace changes are suppressed, tracked fields vary by source, and detection is bounded by snapshot retention and a pipeline reseed (false can mean 'no change seen since the last reseed'). Synthesized; populated for all sources.",
             "default": false
           },
           "recall_reason": {
@@ -2078,7 +2155,8 @@
                 "type": "null"
               }
             ],
-            "title": "Recall Reason"
+            "title": "Recall Reason",
+            "description": "Free-text recall/defect narrative, conformed across sources (CPSC Description, FDA reason-for-recall, USDA HTML summary, NHTSA defect summary, USCG short problem note). Content type and length vary by source; USDA is HTML-encoded and USCG is truncated to ~25 chars. Sources: all five."
           },
           "corrective_action": {
             "anyOf": [
@@ -2089,7 +2167,8 @@
                 "type": "null"
               }
             ],
-            "title": "Corrective Action"
+            "title": "Corrective Action",
+            "description": "Free-text corrective-action / remedy narrative (what the manufacturer and consumer should do). Sources: NHTSA only (null for CPSC/FDA/USDA/USCG in this model)."
           },
           "consequence_of_defect": {
             "anyOf": [
@@ -2100,7 +2179,8 @@
                 "type": "null"
               }
             ],
-            "title": "Consequence Of Defect"
+            "title": "Consequence Of Defect",
+            "description": "Free-text description of what can happen if the defect is not remedied (harm/consequence). Sources: NHTSA only (null for CPSC/FDA/USDA/USCG)."
           },
           "distribution_states": {
             "anyOf": [
@@ -2112,7 +2192,7 @@
               }
             ],
             "title": "Distribution States",
-            "description": "Agency prose (scalar string)."
+            "description": "USDA distribution-states as a raw comma-joined string (e.g. 'Nationwide', 'Arizona, California') — prose, not parsed codes. For machine-readable geography use distribution_state_codes. Sources: USDA only (null for CPSC/FDA/NHTSA/USCG)."
           },
           "distribution_state_codes": {
             "anyOf": [
@@ -2127,7 +2207,7 @@
               }
             ],
             "title": "Distribution State Codes",
-            "description": "Parsed USPS codes."
+            "description": "USPS 2-letter state/territory codes for where the recalled product was distributed (initial distribution area). Null when no geography parsed; an empty array indicates a foreign-country-only recall. A precision-first parse (absence of a code is not proof of non-distribution). Sources: FDA, USDA (null for CPSC/NHTSA/USCG)."
           },
           "distribution_country_codes": {
             "anyOf": [
@@ -2142,7 +2222,7 @@
               }
             ],
             "title": "Distribution Country Codes",
-            "description": "ISO alpha-2, foreign-only (US excluded by design)."
+            "description": "ISO-3166-1 alpha-2 codes for the FOREIGN countries the product was distributed to (US excluded by design — domestic geography is distribution_state_codes). Null when no geography parsed; an empty array indicates a domestic-only recall. Sources: FDA (null for CPSC/USDA/NHTSA/USCG — the USDA path exists but field_states is states-only today)."
           },
           "hazards": {
             "anyOf": [
@@ -2155,7 +2235,7 @@
               }
             ],
             "title": "Hazards",
-            "description": "Opaque hazard objects; may be null."
+            "description": "CPSC structured hazard array (jsonb objects with a free-text 'Name'; categorical HazardType/HazardTypeID are empty at source). Sources: CPSC only (null for FDA/USDA/NHTSA/USCG). NHTSA's harm narrative is in consequence_of_defect."
           },
           "product_upcs": {
             "items": {
@@ -2163,21 +2243,23 @@
             },
             "type": "array",
             "title": "Product Upcs",
-            "description": "Recall-level UPCs."
+            "description": "Recall-level product UPC codes (gold stores them as [{upc:…}] objects; the API flattens to bare strings, [] when absent). Sources: CPSC only and sparse (~5% of CPSC recalls); empty for FDA/USDA/NHTSA/USCG."
           },
           "product_names": {
             "items": {
               "type": "string"
             },
             "type": "array",
-            "title": "Product Names"
+            "title": "Product Names",
+            "description": "Deduplicated array of distinct product names (never null; [] when empty). Source-dependent semantics: CPSC = product name; USCG = boat model name; FDA = the product DESCRIPTION text; USDA = the recall TITLE; NHTSA = the COMPONENT description. Sources: all five."
           },
           "models": {
             "items": {
               "type": "string"
             },
             "type": "array",
-            "title": "Models"
+            "title": "Models",
+            "description": "Deduplicated array of product model identifiers (never null; [] when empty). Populated only for NHTSA (MODELTXT, e.g. 'F-150'); always [] for CPSC, FDA, USDA, USCG. Sources: NHTSA only."
           },
           "hins": {
             "items": {
@@ -2185,71 +2267,15 @@
             },
             "type": "array",
             "title": "Hins",
-            "description": "USCG Hull IDs."
+            "description": "Deduplicated array of USCG Hull Identification Numbers (the boating analog of a VIN/UPC; never null, [] when empty). USCG-only — always [] for CPSC, FDA, USDA, NHTSA; only ~54% of USCG recalls carry a real HIN. Sources: USCG only."
           },
           "firms": {
             "items": {
               "$ref": "#/components/schemas/FirmRef"
             },
             "type": "array",
-            "title": "Firms"
-          },
-          "first_seen_at": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date-time"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "First Seen At"
-          },
-          "last_seen_at": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date-time"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Last Seen At"
-          },
-          "edit_count": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Edit Count"
-          },
-          "is_currently_active": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Is Currently Active"
-          },
-          "was_ever_retracted": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Was Ever Retracted"
+            "title": "Firms",
+            "description": "Array of all firms tied to this recall, one object per firm-role ({firm_id, name, role, match_confidence}), ordered by role then name. A firm in multiple roles appears multiple times, so len(firms) can exceed firm_count. Always a (possibly empty) array, never null. Sources: all five."
           }
         },
         "type": "object",
@@ -2267,14 +2293,17 @@
         "properties": {
           "recall_event_id": {
             "type": "string",
-            "title": "Recall Event Id"
+            "title": "Recall Event Id",
+            "description": "Opaque surrogate id for one recall event, stable across re-extractions: md5('<SOURCE>|<source recall key>'), reused verbatim from silver (ADR 0038). Not a raw agency id — pair source with source_recall_id for the human-facing key. Sources: all five."
           },
           "source": {
-            "$ref": "#/components/schemas/Source"
+            "$ref": "#/components/schemas/Source",
+            "description": "Originating agency feed (closed enum): CPSC, FDA, USDA, NHTSA, USCG. Always populated."
           },
           "source_recall_id": {
             "type": "string",
             "title": "Source Recall Id",
+            "description": "Agency-native recall identifier; meaning varies by source — CPSC RecallNumber, FDA RECALLEVENTID, USDA field_recall_number (DDD-YYYY), NHTSA CAMPNO, USCG recall Number. Pair with source for global identity. Always populated.",
             "examples": [
               "24-001"
             ]
@@ -2289,6 +2318,7 @@
               }
             ],
             "title": "Title",
+            "description": "Human-readable recall headline. Native title for CPSC/USDA; synthesized as '<recall-id> — <firm/model name>' for FDA/NHTSA/USCG (no native title). Effectively always populated.",
             "examples": [
               "Acme Toaster Fire Hazard"
             ]
@@ -2302,7 +2332,8 @@
                 "type": "null"
               }
             ],
-            "title": "Url"
+            "title": "Url",
+            "description": "Public detail-page URL for the recall. Sources: CPSC, USDA, USCG (null for FDA/NHTSA, which provide no per-recall detail URL)."
           },
           "announced_at": {
             "anyOf": [
@@ -2314,12 +2345,14 @@
                 "type": "null"
               }
             ],
-            "title": "Announced At"
+            "title": "Announced At",
+            "description": "Date the recall was first announced/initiated, conformed across all five sources. Nullable: ~20 FDA events lack a trustworthy initiation date. Use published_at when a guaranteed date is required. Sources: all five."
           },
           "published_at": {
             "type": "string",
             "format": "date-time",
-            "title": "Published At"
+            "title": "Published At",
+            "description": "Last-published/modified date, coalesced per source to always be present — the guaranteed sort/pagination key (contrast nullable announced_at). Sources: all five."
           },
           "classification": {
             "anyOf": [
@@ -2331,6 +2364,7 @@
               }
             ],
             "title": "Classification",
+            "description": "Recall severity/hazard classification in the source's NATIVE vocabulary (FDA: 1/2/3, NC=Not Yet Classified; USDA: Class I/II/III, Public Health Alert; USCG: H/L/M/S). NOT normalized across sources. Sources: FDA, USDA, USCG (null for CPSC/NHTSA).",
             "examples": [
               "Class II"
             ]
@@ -2345,6 +2379,7 @@
               }
             ],
             "title": "Risk Level",
+            "description": "USDA health-risk label derived 1:1 from the USDA classification (e.g. 'High - Class I', 'Low - Class II', 'Marginal - Class III', 'Public Health Alert'). Sources: USDA only (null for CPSC/FDA/NHTSA/USCG).",
             "examples": [
               "Low - Class II"
             ]
@@ -2358,7 +2393,8 @@
                 "type": "null"
               }
             ],
-            "title": "Lifecycle Status"
+            "title": "Lifecycle Status",
+            "description": "Recall lifecycle/status in the source's native vocabulary (FDA: Ongoing/Completed/Terminated; USDA: Active Recall/Closed Recall/Public Health Alert; USCG: Open/Closed). NOT normalized; see is_active for a conformed boolean. Sources: FDA, USDA, USCG (null for CPSC/NHTSA)."
           },
           "is_active": {
             "anyOf": [
@@ -2370,7 +2406,7 @@
               }
             ],
             "title": "Is Active",
-            "description": "Tri-state; null for CPSC/NHTSA."
+            "description": "Conformed tri-state flag for whether the recall is still active, derived from each source's lifecycle field (USDA Public Health Alert counts as active). Sources: FDA, USDA, USCG (null for CPSC/NHTSA, which have no lifecycle concept and so match neither true nor false)."
           },
           "reason_category": {
             "anyOf": [
@@ -2381,11 +2417,13 @@
                 "type": "null"
               }
             ],
-            "title": "Reason Category"
+            "title": "Reason Category",
+            "description": "Categorical recall-reason tokens from USDA's FSIS taxonomy (comma-joined, e.g. 'Unreported Allergens, Misbranding'). Sources: USDA only (null for CPSC/FDA/NHTSA/USCG, whose reasons are free text in recall_reason)."
           },
           "distribution_scope": {
             "type": "string",
             "title": "Distribution Scope",
+            "description": "Conformed distribution-breadth enum, always populated: Nationwide, International, Regional, or Unspecified. Classified from real distribution text for FDA/USDA; CPSC/USCG default to Unspecified and NHTSA to Nationwide. Sources: all five.",
             "examples": [
               "Nationwide"
             ]
@@ -2399,32 +2437,31 @@
                 "type": "null"
               }
             ],
-            "title": "Primary Firm Name"
+            "title": "Primary Firm Name",
+            "description": "Primary display firm for the recall — the canonical firm name picked by role priority (manufacturer > establishment > filer > importer > distributor, then alphabetical). Null only if no firm resolves. Sources: all five."
           },
           "firm_count": {
             "type": "integer",
             "title": "Firm Count",
+            "description": "Count of DISTINCT firms linked to this recall across all roles (a firm in multiple roles counts once, so this may be less than len(firms)). 0 when no firm resolves. Sources: all five.",
             "default": 0
           },
           "product_count": {
             "type": "integer",
             "title": "Product Count",
-            "default": 0
-          },
-          "edit_event_count": {
-            "type": "integer",
-            "title": "Edit Event Count",
+            "description": "Number of distinct product rows for this recall. CPSC/FDA/NHTSA can exceed 1; USDA and USCG are always 1 (modeled one-product-per-recall). Never null. Sources: all five.",
             "default": 0
           },
           "has_been_edited": {
             "type": "boolean",
             "title": "Has Been Edited",
+            "description": "True if the pipeline has detected at least one editorially-meaningful change to a tracked event field (recall_reason, classification, lifecycle_status, title, terminated_at) by diffing consecutive bronze snapshots; false otherwise. Observed-edit evidence, NOT a flag of an official agency amendment — cosmetic/whitespace changes are suppressed, tracked fields vary by source, and detection is bounded by snapshot retention and a pipeline reseed (false can mean 'no change seen since the last reseed'). Synthesized; populated for all sources.",
             "default": false
           },
           "rank": {
             "type": "number",
             "title": "Rank",
-            "description": "ts_rank_cd relevance; higher = better, not comparable across queries."
+            "description": "Full-text relevance (ts_rank_cd over the recall search_vector, weighted title>brand>cause>harm). Higher is more relevant, but scores are not comparable across queries. Computed per request; present only on the /recalls/search path."
           }
         },
         "type": "object",
@@ -2443,14 +2480,17 @@
         "properties": {
           "recall_event_id": {
             "type": "string",
-            "title": "Recall Event Id"
+            "title": "Recall Event Id",
+            "description": "Opaque surrogate id for one recall event, stable across re-extractions: md5('<SOURCE>|<source recall key>'), reused verbatim from silver (ADR 0038). Not a raw agency id — pair source with source_recall_id for the human-facing key. Sources: all five."
           },
           "source": {
-            "$ref": "#/components/schemas/Source"
+            "$ref": "#/components/schemas/Source",
+            "description": "Originating agency feed (closed enum): CPSC, FDA, USDA, NHTSA, USCG. Always populated."
           },
           "source_recall_id": {
             "type": "string",
             "title": "Source Recall Id",
+            "description": "Agency-native recall identifier; meaning varies by source — CPSC RecallNumber, FDA RECALLEVENTID, USDA field_recall_number (DDD-YYYY), NHTSA CAMPNO, USCG recall Number. Pair with source for global identity. Always populated.",
             "examples": [
               "24-001"
             ]
@@ -2465,6 +2505,7 @@
               }
             ],
             "title": "Title",
+            "description": "Human-readable recall headline. Native title for CPSC/USDA; synthesized as '<recall-id> — <firm/model name>' for FDA/NHTSA/USCG (no native title). Effectively always populated.",
             "examples": [
               "Acme Toaster Fire Hazard"
             ]
@@ -2478,7 +2519,8 @@
                 "type": "null"
               }
             ],
-            "title": "Url"
+            "title": "Url",
+            "description": "Public detail-page URL for the recall. Sources: CPSC, USDA, USCG (null for FDA/NHTSA, which provide no per-recall detail URL)."
           },
           "announced_at": {
             "anyOf": [
@@ -2490,12 +2532,14 @@
                 "type": "null"
               }
             ],
-            "title": "Announced At"
+            "title": "Announced At",
+            "description": "Date the recall was first announced/initiated, conformed across all five sources. Nullable: ~20 FDA events lack a trustworthy initiation date. Use published_at when a guaranteed date is required. Sources: all five."
           },
           "published_at": {
             "type": "string",
             "format": "date-time",
-            "title": "Published At"
+            "title": "Published At",
+            "description": "Last-published/modified date, coalesced per source to always be present — the guaranteed sort/pagination key (contrast nullable announced_at). Sources: all five."
           },
           "classification": {
             "anyOf": [
@@ -2507,6 +2551,7 @@
               }
             ],
             "title": "Classification",
+            "description": "Recall severity/hazard classification in the source's NATIVE vocabulary (FDA: 1/2/3, NC=Not Yet Classified; USDA: Class I/II/III, Public Health Alert; USCG: H/L/M/S). NOT normalized across sources. Sources: FDA, USDA, USCG (null for CPSC/NHTSA).",
             "examples": [
               "Class II"
             ]
@@ -2521,6 +2566,7 @@
               }
             ],
             "title": "Risk Level",
+            "description": "USDA health-risk label derived 1:1 from the USDA classification (e.g. 'High - Class I', 'Low - Class II', 'Marginal - Class III', 'Public Health Alert'). Sources: USDA only (null for CPSC/FDA/NHTSA/USCG).",
             "examples": [
               "Low - Class II"
             ]
@@ -2534,7 +2580,8 @@
                 "type": "null"
               }
             ],
-            "title": "Lifecycle Status"
+            "title": "Lifecycle Status",
+            "description": "Recall lifecycle/status in the source's native vocabulary (FDA: Ongoing/Completed/Terminated; USDA: Active Recall/Closed Recall/Public Health Alert; USCG: Open/Closed). NOT normalized; see is_active for a conformed boolean. Sources: FDA, USDA, USCG (null for CPSC/NHTSA)."
           },
           "is_active": {
             "anyOf": [
@@ -2546,7 +2593,7 @@
               }
             ],
             "title": "Is Active",
-            "description": "Tri-state; null for CPSC/NHTSA."
+            "description": "Conformed tri-state flag for whether the recall is still active, derived from each source's lifecycle field (USDA Public Health Alert counts as active). Sources: FDA, USDA, USCG (null for CPSC/NHTSA, which have no lifecycle concept and so match neither true nor false)."
           },
           "reason_category": {
             "anyOf": [
@@ -2557,11 +2604,13 @@
                 "type": "null"
               }
             ],
-            "title": "Reason Category"
+            "title": "Reason Category",
+            "description": "Categorical recall-reason tokens from USDA's FSIS taxonomy (comma-joined, e.g. 'Unreported Allergens, Misbranding'). Sources: USDA only (null for CPSC/FDA/NHTSA/USCG, whose reasons are free text in recall_reason)."
           },
           "distribution_scope": {
             "type": "string",
             "title": "Distribution Scope",
+            "description": "Conformed distribution-breadth enum, always populated: Nationwide, International, Regional, or Unspecified. Classified from real distribution text for FDA/USDA; CPSC/USCG default to Unspecified and NHTSA to Nationwide. Sources: all five.",
             "examples": [
               "Nationwide"
             ]
@@ -2575,26 +2624,25 @@
                 "type": "null"
               }
             ],
-            "title": "Primary Firm Name"
+            "title": "Primary Firm Name",
+            "description": "Primary display firm for the recall — the canonical firm name picked by role priority (manufacturer > establishment > filer > importer > distributor, then alphabetical). Null only if no firm resolves. Sources: all five."
           },
           "firm_count": {
             "type": "integer",
             "title": "Firm Count",
+            "description": "Count of DISTINCT firms linked to this recall across all roles (a firm in multiple roles counts once, so this may be less than len(firms)). 0 when no firm resolves. Sources: all five.",
             "default": 0
           },
           "product_count": {
             "type": "integer",
             "title": "Product Count",
-            "default": 0
-          },
-          "edit_event_count": {
-            "type": "integer",
-            "title": "Edit Event Count",
+            "description": "Number of distinct product rows for this recall. CPSC/FDA/NHTSA can exceed 1; USDA and USCG are always 1 (modeled one-product-per-recall). Never null. Sources: all five.",
             "default": 0
           },
           "has_been_edited": {
             "type": "boolean",
             "title": "Has Been Edited",
+            "description": "True if the pipeline has detected at least one editorially-meaningful change to a tracked event field (recall_reason, classification, lifecycle_status, title, terminated_at) by diffing consecutive bronze snapshots; false otherwise. Observed-edit evidence, NOT a flag of an official agency amendment — cosmetic/whitespace changes are suppressed, tracked fields vary by source, and detection is bounded by snapshot retention and a pipeline reseed (false can mean 'no change seen since the last reseed'). Synthesized; populated for all sources.",
             "default": false
           }
         },
@@ -2768,7 +2816,8 @@
                 "type": "null"
               }
             ],
-            "title": "Status"
+            "title": "Status",
+            "description": "USCG boat-manufacturer directory operating status, passed through verbatim from the scraped USCG directory. Observed warn-guarded live domain (per the data side's accepted_values test as of 2026-06-19): 'In Business', 'Inactive', 'Federal or State Agency'. Not enum-constrained, so a future upstream value still parses. Sources: USCG only."
           },
           "in_business": {
             "anyOf": [

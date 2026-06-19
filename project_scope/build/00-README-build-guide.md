@@ -1,5 +1,7 @@
 # recalls-api — Build Guide (start here)
 
+> **⚠️ Post-apply reconciliation (2026-06-19, `feature/api-audit`).** The API **response** contract was narrowed *after* these build docs were written. The provenance apply (a) **pruned six pipeline-observability fields** from the response models — `is_currently_active`, `was_ever_retracted`, `first_seen_at`, `last_seen_at`, `edit_count`, `edit_event_count` (**kept** `has_been_edited`) — and (b) **dropped the all-null per-product `ProductSearchHit.upc`** response field. The **gold marts still carry** all of these columns, and the `upc=` **search selector** is unchanged (it matches `recall_product_upcs`). Where field lists or model snippets in this suite still show the pruned fields or per-product `upc`, they describe the **pre-prune** API — the authoritative current contract is the committed [`openapi.json`](../../openapi.json) + [`documentation/api-reference.md`](../../documentation/api-reference.md) / [`data_contract.md`](../../documentation/data_contract.md).
+
 This directory is the **hardened, build-ready spec** for the `recalls-api` repo: an **open (no auth,
 no credentials), read-only** FastAPI service over the PostgreSQL **gold marts** produced by the
 separate pipeline repo `justanesta/consumer-product-recalls`. It hardens
@@ -56,7 +58,7 @@ Read in order; each builds on the prior:
 - **Error envelope:** `{"error": {"type", "detail", "request_id"}}`. Taxonomy: `ResourceNotFound`=404, `InvalidParameter`=422, **`BadCursor`=400**, `UpstreamUnavailable`=503 (+`Retry-After`), `RateLimited`=429 (+`Retry-After`); catch-all 500 logs the traceback and returns an opaque body (never leak SQL/DSN).
 - **Logging/observability:** structlog JSON to stdout; per-request `request_id` via contextvars middleware, echoed in the envelope + `X-Request-ID`. v1 = operator reads platform logs; no Sentry/OTel (named upgrade triggers in 06/ADR 0029).
 - **Testing/CI:** pytest, **`--cov-fail-under=85`**, offline/deterministic, never touches prod Neon; integration via `httpx.AsyncClient` + `ASGITransport` against a **seeded Postgres service container** (`seed_gold.sql`). CI gate: `uv sync → ruff check → ruff format --check → pyright → pytest → openapi drift → pre-commit run --all-files`.
-- **OpenAPI:** FastAPI-generated is the source of truth; `python -m recalls_api.export_openapi > openapi.json`; committed snapshot is the contract-test fixture (fail on drift).
+- **OpenAPI:** FastAPI-generated is the source of truth; `python -m recalls_api.export_openapi` (writes the file directly, no redirect; `--check` to verify); committed snapshot is the contract-test fixture (fail on drift).
 - **Deploy:** Fly.io (Render fallback; Cloudflare Workers rejected — asyncpg can't run on Pyodide/WASM). `min_machines_running=0`; cold DB → 503+`Retry-After` (never hang). HTTP cache headers keyed to the nightly ~03:00 UTC rebuild.
 
 ## Prerequisites & blockers

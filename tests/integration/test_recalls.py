@@ -29,6 +29,35 @@ async def test_filter_by_source(client: AsyncClient) -> None:
     assert ids == {"F-1001", "F-1006"}
 
 
+async def test_filter_by_source_multi_value_comma(client: AsyncClient) -> None:
+    # Comma-separated any-of (OR): FDA or USDA = both F-rows plus U-2002.
+    r = await client.get("/recalls", params={"source": "FDA,USDA", "limit": 100})
+    ids = {it["source_recall_id"] for it in r.json()["items"]}
+    assert ids == {"F-1001", "F-1006", "U-2002"}
+
+
+async def test_filter_by_source_multi_value_repeated(client: AsyncClient) -> None:
+    # Repeated-param form is equivalent to the comma form.
+    r = await client.get("/recalls?source=FDA&source=USDA&limit=100")
+    ids = {it["source_recall_id"] for it in r.json()["items"]}
+    assert ids == {"F-1001", "F-1006", "U-2002"}
+
+
+async def test_filter_by_classification_multi_value(client: AsyncClient) -> None:
+    r = await client.get("/recalls", params={"classification": "2,3", "limit": 100})
+    ids = {it["source_recall_id"] for it in r.json()["items"]}
+    assert ids == {"F-1001", "F-1006"}  # FDA classification 2 (F-1001) + 3 (F-1006)
+
+
+async def test_multi_value_within_field_or_across_fields_and(client: AsyncClient) -> None:
+    # source any-of OR, AND-ed with classification: (FDA or USDA) and "2" = F-1001 only
+    # (F-1006 is "3", U-2002 is "Class II").
+    r = await client.get(
+        "/recalls", params={"source": "FDA,USDA", "classification": "2", "limit": 100}
+    )
+    assert {it["source_recall_id"] for it in r.json()["items"]} == {"F-1001"}
+
+
 async def test_is_active_true_excludes_null_sources(client: AsyncClient) -> None:
     # is_active=true matches only sources that carry status; CPSC/NHTSA (null) must NOT appear.
     r = await client.get("/recalls", params={"is_active": "true", "limit": 100})
@@ -37,7 +66,7 @@ async def test_is_active_true_excludes_null_sources(client: AsyncClient) -> None
 
 
 async def test_filter_by_classification(client: AsyncClient) -> None:
-    r = await client.get("/recalls", params={"classification": "Class I", "limit": 100})
+    r = await client.get("/recalls", params={"classification": "2", "limit": 100})
     ids = {it["source_recall_id"] for it in r.json()["items"]}
     assert ids == {"F-1001"}
 
@@ -107,6 +136,15 @@ async def test_filter_by_distribution_state(client: AsyncClient) -> None:
     hit = await client.get("/recalls", params={"distribution_state": "ca", "limit": 100})
     assert {it["source_recall_id"] for it in hit.json()["items"]} == {"U-2002"}
     miss = await client.get("/recalls", params={"distribution_state": "NY", "limit": 100})
+    assert miss.json()["items"] == []
+
+
+async def test_filter_by_distribution_state_multi_value_overlap(client: AsyncClient) -> None:
+    # Array overlap (&&) any-of: U-2002 ships to {CA, OR, WA}; {NY, CA} overlaps -> hit.
+    hit = await client.get("/recalls", params={"distribution_state": "NY,CA", "limit": 100})
+    assert {it["source_recall_id"] for it in hit.json()["items"]} == {"U-2002"}
+    # No overlap with the seeded states -> empty.
+    miss = await client.get("/recalls", params={"distribution_state": "NY,TX", "limit": 100})
     assert miss.json()["items"] == []
 
 
@@ -223,12 +261,30 @@ async def test_bad_cursor_returns_400(client: AsyncClient) -> None:
     assert r.json()["error"]["type"] == "bad_cursor"
 
 
+async def test_cross_path_cursor_replay_returns_400(client: AsyncClient) -> None:
+    # A cursor is sort-path-tagged: replaying a published_at ('p') cursor on the rank-sorted search
+    # endpoint (or a rank ('r') cursor on the published_at list) must be 400, not a 5xx.
+    p_cursor = (await client.get("/recalls", params={"limit": 1})).json()["next_cursor"]
+    assert p_cursor is not None  # 6 seeded recalls -> page 1 of limit 1 has a next cursor
+    bad = await client.get("/recalls/search", params={"q": "acme", "cursor": p_cursor})
+    assert bad.status_code == 400
+    assert bad.json()["error"]["type"] == "bad_cursor"
+
+    r_cursor = (await client.get("/recalls/search", params={"q": "acme", "limit": 1})).json()[
+        "next_cursor"
+    ]
+    assert r_cursor is not None  # "acme" matches 2 recalls -> page 1 of limit 1 has a next cursor
+    bad2 = await client.get("/recalls", params={"cursor": r_cursor})
+    assert bad2.status_code == 400
+    assert bad2.json()["error"]["type"] == "bad_cursor"
+
+
 async def test_detail_hit_full_fields(client: AsyncClient) -> None:
     r = await client.get("/recalls/fda/F-1001")
     assert r.status_code == 200
     d = r.json()
     assert d["source"] == "FDA"
-    assert d["classification"] == "Class I"
+    assert d["classification"] == "2"
     assert d["product_names"] == ["Acme Peanut Butter 16oz", "Acme Peanut Butter 32oz"]
     assert d["models"] == []  # NULL in mart -> coerced to []
     assert d["hins"] == []
@@ -236,6 +292,13 @@ async def test_detail_hit_full_fields(client: AsyncClient) -> None:
     assert len(d["firms"]) == 1
     assert d["firms"][0]["name"] == "Acme Foods Inc"
     assert d["distribution_states"] == "Nationwide"  # scalar prose string
+
+
+async def test_detail_upc_recall_does_not_500_and_flattens(client: AsyncClient) -> None:
+    # Regression: gold stores UPCs as [{"upc": "X"}] objects; the detail must flatten, not 500.
+    r = await client.get("/recalls/fda/F-1001")
+    assert r.status_code == 200
+    assert r.json()["product_upcs"] == ["012345678905"]
 
 
 async def test_detail_source_is_case_insensitive(client: AsyncClient) -> None:
@@ -250,7 +313,21 @@ async def test_detail_multi_firm_rollup(client: AsyncClient) -> None:
     assert d["firm_count"] == 2
     assert {f["name"] for f in d["firms"]} == {"Tyson Foods", "Cold Storage Co"}
     assert d["distribution_state_codes"] == ["CA", "OR", "WA"]
-    assert d["was_ever_retracted"] is True
+
+
+async def test_detail_omits_pruned_observability_fields(client: AsyncClient) -> None:
+    # Audit Q2 / provenance prune: these pipeline-observability fields are no longer projected.
+    d = (await client.get("/recalls/usda/U-2002")).json()
+    for pruned in (
+        "edit_event_count",
+        "edit_count",
+        "first_seen_at",
+        "last_seen_at",
+        "is_currently_active",
+        "was_ever_retracted",
+    ):
+        assert pruned not in d
+    assert "has_been_edited" in d  # the one kept "revised" signal
 
 
 async def test_detail_missing_returns_404(client: AsyncClient) -> None:
