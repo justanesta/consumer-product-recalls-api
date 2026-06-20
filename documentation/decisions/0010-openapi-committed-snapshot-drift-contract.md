@@ -18,7 +18,7 @@ Without a committed snapshot, a PR can change a response model (e.g., flip `anno
 
 2. **`openapi.json` at repo root is the committed contract artifact.** Maintainers regenerate it with `python -m recalls_api.export_openapi` and commit the result as part of any intentional surface change.
 
-3. **CI enforces byte-identical agreement** as a hard gate step (`ci.yml` line 59-60): `uv run python -m recalls_api.export_openapi --check` exits 1 if the generated output differs from the committed file, with a remediation instruction on stderr. No separate job spin-up is needed; `create_app().openapi()` requires no DB, so the step shares the synced environment inline.
+3. **CI enforces byte-identical agreement** as a hard gate step (the OpenAPI drift check in `ci.yml`): `uv run python -m recalls_api.export_openapi --check` exits 1 if the generated output differs from the committed file, with a remediation instruction on stderr. No separate job spin-up is needed; `create_app().openapi()` requires no DB, so the step shares the synced environment inline.
 
 4. **A pre-commit hook (`openapi-drift`) runs the same check** on every local commit touching `src/recalls_api/*.py` or `openapi.json` (hook `files:` pattern `^(src/recalls_api/.*\.py|openapi\.json)$`), catching drift before push.
 

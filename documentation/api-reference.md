@@ -195,9 +195,9 @@ GET /recalls?source=USDA&with_total=true
 ### Caveats
 
 - **`is_active` and `lifecycle_status` filters exclude CPSC/NHTSA rows** — those sources carry no native lifecycle field; both columns are `null` for every CPSC and NHTSA record. Root cause: [data_contract.md](data_contract.md).
-- **`classification` is source-native, not a unified enum** — `Class I` on an FDA record and `Class I` on a USDA record mean the same hazard tier, but `H` on USCG and blank on CPSC/NHTSA are structurally different values from different agencies. Root cause: [data_contract.md](data_contract.md).
+- **`classification` is source-native, not a unified enum** — `Class I` on an FDA record and `Class I` on a USDA record mean the same hazard tier, but `H` on USCG and blank on CPSC/NHTSA are structurally different values from different agencies. USCG's `H/L/M/S` have no officially documented meaning, so treat their ordering as provisional (working assumption `H/M/L` ≈ High/Medium/Low; `S` unverified). Root cause: [data_contract.md](data_contract.md).
 - **`distribution_state` / `distribution_country` are FDA/USDA-only** — CPSC, NHTSA, and USCG have no distribution area data in the upstream source. Root cause: [data_contract.md](data_contract.md).
-- **Unfiltered list sort is a full table sort** — without a leading `source` filter the planner cannot use the `btree(source, published_at)` index for ordering. Add `source=` for consistent performance on deep pages.
+- **The default sort is index-backed.** The `published_at DESC, recall_event_id` keyset is served by an upstream index, so deep pages stay fast even without a `source` filter. A leading `source=` simply lets the planner use a `(source, published_at)` index instead.
 
 ---
 
@@ -299,7 +299,7 @@ All `RecallSummary` fields (same Sources as above), plus:
 | `hins` | list[string] | USCG | USCG Hull Identification Numbers. `[]` for non-USCG sources. |
 | `firms` | list[FirmRef] | all | One entry per firm-role, so `len(firms)` can exceed `firm_count`. Each has `firm_id`, `name`, `role`, `match_confidence`. |
 
-> **Pipeline-observability fields were removed (audit Q2).** `first_seen_at`, `last_seen_at`, `edit_count`, `edit_event_count`, `is_currently_active`, and `was_ever_retracted` are no longer returned — they implied authoritative agency semantics they lack and were null for most sources. `has_been_edited` is kept as the single "revised since first ingest" signal. Root cause: [data_contract.md](data_contract.md#per-source-field-provenance).
+> **Removed fields.** `first_seen_at`, `last_seen_at`, `edit_count`, `edit_event_count`, `is_currently_active`, and `was_ever_retracted` are no longer returned — they implied agency semantics they lack. `has_been_edited` is the single "revised since first ingest" signal.
 
 ### Examples
 
@@ -410,7 +410,7 @@ curl "https://consumer-product-recalls-api.fly.dev/products/search?hin=ABC12345D
 UPC recall lookup:
 
 ```bash
-curl "https://consumer-product-recalls-api.fly.dev/products/search?upc=012345678901"
+curl "https://consumer-product-recalls-api.fly.dev/products/search?upc=012345678905"
 ```
 
 Combine `hin` and `model`:
@@ -459,8 +459,8 @@ The **Sources** column summarizes which feeds populate each field; full detail i
 | `alternate_names` | list[string] | derived | Brand / DBA surface-form aliases (the DBA brand plus brand-bearing parentheticals), kept as a search/alias field — distinct from the raw spellings in `observed_names`. |
 | `total_recalls` | integer | all | Total recall count across all sources. |
 | `active_recalls` | integer | FDA/USDA/USCG | Count of recalls currently marked active (CPSC/NHTSA never count — no lifecycle). |
-| `first_recall_at` | datetime \| null | all | Earliest recall date for this firm. |
-| `last_recall_at` | datetime \| null | all | Most recent recall date for this firm. |
+| `first_recall_at` | datetime \| null | all | Earliest recall date for this firm (by announcement date). |
+| `last_recall_at` | datetime \| null | all | Most recent recall date for this firm (same basis). |
 | `roles` | list[string] | all | Distinct roles this firm has played across its recalls: `manufacturer`, `establishment`, `filer`, `importer`, `distributor`. |
 | `recalls_by_source` | object | all | Map of source → recall count, e.g. `{"CPSC": 3, "FDA": 1}`. |
 | `distinct_products` | integer | all | Distinct product records linked to this firm (per-firm footprint, not a global distinct). |
@@ -521,7 +521,8 @@ Aggregate **read-through** endpoints over the gold `fct_*` marts — for the das
 
 ### Caveats
 
-- **`classification` is source-native** (as on `/recalls`): FDA `1/2/3/NC`, USDA `Class I/II/III` + `Public Health Alert`, USCG `H/L/M/S`, CPSC/NHTSA null. Legends must be scoped per source — there is no unified scale.
+- **Time-series periods are dated by announcement.** `recalls-by-period`, `monthly-trend`, and `units` bucket each recall by when it was first announced (falling back to its publish date when none is recorded), so counts can differ from a publish-date view.
+- **`classification` is source-native** (as on `/recalls`): FDA `1/2/3/NC`, USDA `Class I/II/III` + `Public Health Alert`, USCG `H/L/M/S`, CPSC/NHTSA null. Legends must be scoped per source — there is no unified scale. USCG's `H/L/M/S` have no officially documented meaning; treat the ordering as provisional.
 - **The two geography lenses are different questions.** `distribution` = where the product went (FDA/USDA); `firm_registration` = where the firm is registered (USDA/USCG/FDA). Render as two captioned charts, never one toggle.
 - **Geography / country counts are multi-valued** — per-state / per-country counts sum to more than the distinct-recall total (an "industry-footprint" reading).
 - **Units are not cross-source comparable** and have no `ALL` rollup; `unit_category` keeps incommensurable units apart (never sum across categories or sources). Root causes: [data_contract.md](data_contract.md).

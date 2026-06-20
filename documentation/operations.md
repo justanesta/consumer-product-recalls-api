@@ -24,12 +24,12 @@ flowchart LR
 | Stage | File | Key behaviour |
 |---|---|---|
 | CI gate | `.github/workflows/ci.yml` | five-step quality gate — see [development.md § Quality Gate](development.md#quality-gate) for the full step sequence |
-| Deploy trigger | `.github/workflows/deploy.yml` line 15 | `conclusion == 'success'` — red CI blocks deploy entirely |
-| Checkout | `deploy.yml` line 24 | checks out `workflow_run.head_sha`, not HEAD, so the exact commit CI passed is what gets built |
-| flyctl | `deploy.yml` line 25 | pinned to `superfly/flyctl-actions/setup-flyctl@1.5` |
-| Remote build | `deploy.yml` line 27 | `flyctl deploy --remote-only` — Docker build runs on Fly's builder, not the Actions runner; `GIT_SHA` is baked into the image as the `GIT_SHA` env var (the ETag `startup_id`) |
-| Readiness smoke | `deploy.yml` lines 32–40 | hits `https://consumer-product-recalls-api.fly.dev/health/db` (SELECT 1 probe); retries cover a cold-Neon wake returning 503 before Neon is ready |
-| Concurrency guard | `deploy.yml` lines 18–20 | `group: deploy-production`, `cancel-in-progress: false` — no parallel deploys; an in-flight deploy is never cancelled by a new push |
+| Deploy trigger | `.github/workflows/deploy.yml` | `conclusion == 'success'` — red CI blocks deploy entirely |
+| Checkout | `deploy.yml` | checks out `workflow_run.head_sha`, not HEAD, so the exact commit CI passed is what gets built |
+| flyctl | `deploy.yml` | pinned to `superfly/flyctl-actions/setup-flyctl@1.5` |
+| Remote build | `deploy.yml` | `flyctl deploy --remote-only` — Docker build runs on Fly's builder, not the Actions runner; `GIT_SHA` is baked into the image as the `GIT_SHA` env var (the ETag `startup_id`) |
+| Readiness smoke | `deploy.yml` | hits `https://consumer-product-recalls-api.fly.dev/health/db` (SELECT 1 probe); retries cover a cold-Neon wake returning 503 before Neon is ready |
+| Concurrency guard | `deploy.yml` | `group: deploy-production`, `cancel-in-progress: false` — no parallel deploys; an in-flight deploy is never cancelled by a new push |
 
 ### Manual deploy
 

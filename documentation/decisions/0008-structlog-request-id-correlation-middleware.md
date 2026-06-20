@@ -22,14 +22,14 @@ Plain `logging.basicConfig` can produce JSON (with a formatter), but contextvar 
 
 ## Decision
 
-1. **`configure_logging(log_level)`** is called once at `create_app()` startup (`main.py:53`). It selects `ConsoleRenderer` when `sys.stderr.isatty()` or `LOG_FORMAT=console`; otherwise `JSONRenderer` to stdout. The shared processor chain is: `merge_contextvars` → `add_log_level` → `add_logger_name` → `TimeStamper(fmt="iso")` → `PositionalArgumentsFormatter` → `StackInfoRenderer` → (`format_exc_info` on the JSON path) → renderer. A single `StreamHandler(sys.stdout)` on the stdlib root logger bridges third-party loggers (SQLAlchemy, asyncpg, uvicorn) through the same chain. `sqlalchemy.engine`, `sqlalchemy.pool`, and `uvicorn.access` are silenced to `WARNING`.
+1. **`configure_logging(log_level)`** is called once at `create_app()` startup (`main.py`). It selects `ConsoleRenderer` when `sys.stderr.isatty()` or `LOG_FORMAT=console`; otherwise `JSONRenderer` to stdout. The shared processor chain is: `merge_contextvars` → `add_log_level` → `add_logger_name` → `TimeStamper(fmt="iso")` → `PositionalArgumentsFormatter` → `StackInfoRenderer` → (`format_exc_info` on the JSON path) → renderer. A single `StreamHandler(sys.stdout)` on the stdlib root logger bridges third-party loggers (SQLAlchemy, asyncpg, uvicorn) through the same chain. `sqlalchemy.engine`, `sqlalchemy.pool`, and `uvicorn.access` are silenced to `WARNING`.
 
-2. **`RequestIdMiddleware`** (`logging.py:84`) is registered as the outermost middleware layer (added last in `main.py:87`; see middleware-stack ordering in [architecture.md](../architecture.md)). On each request:
+2. **`RequestIdMiddleware`** in `logging.py` is registered as the outermost middleware layer (added last in `create_app()` (`main.py`); see middleware-stack ordering in [architecture.md](../architecture.md)). On each request:
    - Reads `X-Request-ID` from incoming headers; mints `uuid4().hex` if absent.
    - Sets `_request_id: ContextVar` and calls `structlog.contextvars.bind_contextvars(request_id=rid)` so every `log.*` call in the request scope inherits it automatically.
    - After the response: echoes `X-Request-ID` on response headers, emits one `log.info("request", method, path, status, latency_ms)`, clears structlog contextvars, and resets the ContextVar token (no leak across requests).
 
-3. **`get_request_id()`** (`logging.py:30`) exposes the contextvar value. The error envelope builder (`errors.py:21`) imports and calls it to populate `error.request_id` without coupling to the request object. Outside a request the default is `"-"`.
+3. **`get_request_id()`** in `logging.py` exposes the contextvar value. The error envelope builder `_envelope()` in `errors.py` imports and calls it to populate `error.request_id` without coupling to the request object. Outside a request the default is `"-"`.
 
 ---
 

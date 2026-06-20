@@ -12,7 +12,7 @@ from typing import Any
 
 import structlog
 from fastapi import FastAPI, Request, status
-from fastapi.exceptions import RequestValidationError
+from fastapi.exceptions import RequestValidationError, ResponseValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.exc import DBAPIError, OperationalError
@@ -110,6 +110,26 @@ async def _db_error_handler(_: Request, exc: Exception) -> JSONResponse:
     )
 
 
+async def _response_validation_error_handler(
+    _: Request, exc: ResponseValidationError
+) -> JSONResponse:
+    # A response MODEL failed to serialize — a mart value violates the wire contract (e.g. a numeric
+    # zip where the schema says str, or a null where the schema says list). Without this, it fell to
+    # the catch-all as an opaque 500 that HID which field broke, so diagnosis meant re-deriving it
+    # from the models by hand. Log the offending field path(s) + message; the CLIENT still gets the
+    # uniform opaque envelope (never leak internal field names/values to consumers).
+    fields = [
+        {"loc": ".".join(str(p) for p in e.get("loc", ())), "msg": e.get("msg", "")}
+        for e in exc.errors()
+    ]
+    log.error("response_validation_error", fields=fields)
+    return _envelope(
+        "internal_error",
+        "an unexpected error occurred",
+        status.HTTP_500_INTERNAL_SERVER_ERROR,
+    )
+
+
 async def _catch_all_handler(_: Request, exc: Exception) -> JSONResponse:
     # Full traceback to logs; OPAQUE body to the client. Never leak SQL/DSN/exception text.
     log.error("unhandled_exception", exc_info=exc)
@@ -140,6 +160,8 @@ def register_error_handlers(app: FastAPI) -> None:
     """Wire the handlers. One ApiError handler covers all subtypes (FastAPI matches by MRO)."""
     app.add_exception_handler(ApiError, _api_error_handler)  # type: ignore[arg-type]
     app.add_exception_handler(RequestValidationError, _validation_error_handler)  # type: ignore
+    # Response-model serialization failures: log the offending field, still return the opaque 500.
+    app.add_exception_handler(ResponseValidationError, _response_validation_error_handler)  # type: ignore
     # Cold/asleep/unreachable Neon: asyncpg raises bare TimeoutError/ConnectionError/OSError that
     # SQLAlchemy does NOT wrap (OSError's MRO covers them); map those + SQLAlchemy's own errors to
     # 503 + Retry-After rather than leaking a 500.

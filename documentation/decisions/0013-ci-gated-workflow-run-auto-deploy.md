@@ -14,19 +14,19 @@ A third concern is secrets hygiene. `NEON_DATABASE_URL_RO` must never appear in 
 
 ## Decision
 
-1. **Two workflows.** `ci.yml` triggers on `push` and `pull_request` to `main`; `deploy.yml` triggers on `workflow_run: CI completed` restricted to `main`. The deploy job carries `if: github.event.workflow_run.conclusion == 'success'`, making a red CI a structural — not a conditional — deploy block. (`.github/workflows/ci.yml:3-7`, `.github/workflows/deploy.yml:4-15`)
+1. **Two workflows.** `ci.yml` triggers on `push` and `pull_request` to `main`; `deploy.yml` triggers on `workflow_run: CI completed` restricted to `main`. The deploy job carries `if: github.event.workflow_run.conclusion == 'success'`, making a red CI a structural — not a conditional — deploy block. (the triggers in `ci.yml` and `deploy.yml`)
 
-2. **CI gate steps:** the full six-step quality gate documented in [development.md](../development.md#quality-gate) must pass. (`.github/workflows/ci.yml:44-63`)
+2. **CI gate steps:** the full six-step quality gate documented in [development.md](../development.md#quality-gate) must pass. (the gate steps in `.github/workflows/ci.yml`)
 
-3. **Exact-SHA deploy.** `deploy.yml` checks out `github.event.workflow_run.head_sha` — the commit CI actually passed — not the current `HEAD`. This prevents a race where a new push lands between CI completion and deploy start. (`.github/workflows/deploy.yml:24`)
+3. **Exact-SHA deploy.** `deploy.yml` checks out `github.event.workflow_run.head_sha` — the commit CI actually passed — not the current `HEAD`. This prevents a race where a new push lands between CI completion and deploy start. (the `head_sha` checkout in `deploy.yml`)
 
-4. **Remote build with `GIT_SHA` injection.** `flyctl deploy --remote-only --build-arg GIT_SHA=<sha>` builds the image on Fly's builder and bakes the SHA into the `GIT_SHA` env var (used as the ETag `startup_id` component; it is not written to an OCI image label). (`.github/workflows/deploy.yml:27`)
+4. **Remote build with `GIT_SHA` injection.** `flyctl deploy --remote-only --build-arg GIT_SHA=<sha>` builds the image on Fly's builder and bakes the SHA into the `GIT_SHA` env var (used as the ETag `startup_id` component; it is not written to an OCI image label). (the remote-build step in `deploy.yml`)
 
-5. **Secrets posture.** `FLY_API_TOKEN` is a GitHub secret scoped to the `production` environment, passed via `env:`, never inlined in a `run:` string. `NEON_DATABASE_URL_RO` is a Fly runtime secret set out-of-band via `flyctl secrets set` and is never present in `fly.toml`, CI env blocks, or build args. (`.github/workflows/deploy.yml:17-30`)
+5. **Secrets posture.** `FLY_API_TOKEN` is a GitHub secret scoped to the `production` environment, passed via `env:`, never inlined in a `run:` string. `NEON_DATABASE_URL_RO` is a Fly runtime secret set out-of-band via `flyctl secrets set` and is never present in `fly.toml`, CI env blocks, or build args. (the deploy job's `env:` in `deploy.yml`)
 
-6. **Post-deploy readiness smoke.** A retry loop hits `GET /health/db` (not `/health`) up to 5 times with 10 s gaps, then exits 1 on failure. `/health/db` is used because it exercises the Neon connection; `/health` is process-only and would pass before Neon wakes. (`.github/workflows/deploy.yml:31-40`)
+6. **Post-deploy readiness smoke.** A retry loop hits `GET /health/db` (not `/health`) up to 5 times with 10 s gaps, then exits 1 on failure. `/health/db` is used because it exercises the Neon connection; `/health` is process-only and would pass before Neon wakes. (the readiness-smoke step in `deploy.yml`)
 
-7. **No parallel deploys.** `concurrency: group: deploy-production, cancel-in-progress: false` ensures in-flight deploys are never cancelled by a newer push. (`.github/workflows/deploy.yml:18-20`)
+7. **No parallel deploys.** `concurrency: group: deploy-production, cancel-in-progress: false` ensures in-flight deploys are never cancelled by a newer push. (the `concurrency:` block in `deploy.yml`)
 
 8. **Render fallback is documented, not wired.** `render.yaml` exists as a documented fallback stub (`runtime: docker`, `healthCheckPath: /health`, `NEON_DATABASE_URL_RO sync: false`) but is not connected to CI; activating it requires only pointing the Render dashboard at the repo.
 
@@ -37,7 +37,7 @@ A third concern is secrets hygiene. `NEON_DATABASE_URL_RO` must never appear in 
 - The `workflow_run` trigger introduces a small delay (CI must fully complete before deploy starts) — acceptable for a non-latency-sensitive deploy cadence.
 - The post-deploy smoke retry loop (5 × 10 s = up to 50 s) does not auto-rollback on failure in v1; a failed smoke is surfaced as a failed workflow step requiring manual `flyctl releases rollback`.
 - `min_machines_running=0` (scale-to-zero) means the first request after an idle period pays both cold starts. Raising to `min_machines_running=1` is the documented lever when a website SLO is committed; it is a `fly.toml` change, not a code change.
-- The spec in `project_scope/build/06-deployment-and-ops.md:870-872` shows an `on: push: branches: [main]` trigger; the shipped `deploy.yml` uses `on: workflow_run` instead. The shipped version is strictly safer and supersedes the spec.
+- The spec in `project_scope/build/06-deployment-and-ops.md` shows an `on: push: branches: [main]` trigger; the shipped `deploy.yml` uses `on: workflow_run` instead. The shipped version is strictly safer and supersedes the spec.
 
 **Benefits:**
 

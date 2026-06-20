@@ -48,7 +48,7 @@ The `recalls-api` reads four dbt-materialized gold objects from the pipeline's N
 
 ### `recall_event_id`
 
-Computed in the API at `GET /recalls/{source}/{recall_id}` (`queries/recalls.py:82–84`):
+Computed in the API at `GET /recalls/{source}/{recall_id}` by `compute_recall_event_id()` (`queries/recalls.py`):
 
 ```python
 hashlib.md5(f"{source.upper()}|{recall_id}".encode()).hexdigest()
@@ -82,11 +82,11 @@ An opaque cursor anchor generated per-source by the pipeline. Do not construct i
 
 | Response model | Mart | Notes |
 |---|---|---|
-| `RecallSummary` | `mart_recall_summary` | 18-column list projection; `distribution_scope` is NOT NULL in the mart |
+| `RecallSummary` | `mart_recall_summary` | 17-column list projection; `distribution_scope` is NOT NULL in the mart |
 | `RecallSearchHit` | `mart_recall_summary` | `RecallSummary` + computed `rank: float` |
-| `RecallDetail` | `mart_recall_summary` | Full row; `product_upcs`, `product_names`, `models`, `hins`, `firms` are left NULL by the mart when empty; the API `_none_to_list` validator (`models/recalls.py:104`) coerces them to `[]` at the response layer. (`hazards` is not coerced and may remain null.) |
-| `ProductSearchHit` | `mart_product_search` | 19 mart columns + optional computed `rank`; `upc_is_recall_level: True` is a synthetic API field (not a mart column) |
-| `FirmProfile` | `mart_firm_profile` | Full row; `firm_usda_attributes`, `firm_uscg_attributes`, `firm_fda_attributes` are JSON arrays of agency registration sidecars |
+| `RecallDetail` | `mart_recall_summary` | Full row; `product_upcs`, `product_names`, `models`, `hins`, `firms` are left NULL by the mart when empty; the API `_none_to_list` validator on `RecallDetail` coerces them to `[]` at the response layer. (`hazards` is not coerced and may remain null.) |
+| `ProductSearchHit` | `mart_product_search` | 18 mart columns + optional computed `rank`; `upc_is_recall_level: True` is a synthetic API field (not a mart column) |
+| `FirmProfile` | `mart_firm_profile` | Full row; `firm_usda_attributes`, `firm_uscg_attributes`, `firm_fda_attributes` are JSON arrays of agency registration sidecars. The API coerces sidecar values at the response boundary: numeric identifiers (`zip`, `fips_code`, `establishment_id`, `mic`) to strings, and a null `prior_holders` to `[]`. |
 
 See [api-reference.md](api-reference.md) for the per-endpoint field tables.
 
@@ -169,8 +169,8 @@ Which of the five agency feeds populates each exposed field. This is the at-a-gl
 | `alternate_names` | n/a | n/a | n/a | n/a | n/a | derived enrichment (firm crosswalk) |
 | `total_recalls` | Y | Y | Y | Y | Y | distinct recalls, cross-source |
 | `active_recalls` | – | Y | Y | – | Y | only FDA/USDA/USCG can be active |
-| `first_recall_at` | Y | Y | Y | Y | Y | min(published_at) |
-| `last_recall_at` | Y | Y | Y | Y | Y | max(published_at) |
+| `first_recall_at` | Y | Y | Y | Y | Y | min(coalesce(announced_at, published_at)) — announce-date basis |
+| `last_recall_at` | Y | Y | Y | Y | Y | max(coalesce(announced_at, published_at)) — announce-date basis |
 | `roles` | Y | Y | Y | Y | Y | distinct roles |
 | `recalls_by_source` | Y | Y | Y | Y | Y | sparse {source → count} object |
 | `distinct_products` | Y | Y | Y | Y | Y | per-firm footprint (NOT global-distinct) |

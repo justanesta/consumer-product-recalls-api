@@ -255,13 +255,15 @@ insert into mart_firm_profile (
 ('22222222222222222222222222222222', 'Tyson Foods', 'tyson foods', '["Tyson Foods"]',
  '["M12345"]', '[]', 1, 0, '2026-04-15 08:00:00+00', '2026-04-15 08:00:00+00',
  '["establishment"]', '{"USDA": 1}', 1,
- '[{"establishment_id": "M12345", "establishment_name": "TYSON FOODS", "city": "Springdale", "state": "AR", "status_regulated_est": ""}]',
+ '[{"establishment_id": "M12345", "establishment_name": "TYSON FOODS", "city": "Springdale", "state": "AR", "zip": 72762, "fips_code": 5007, "status_regulated_est": ""}]',
  null, null),
--- Boaty Mfg — USCG only, USCG sidecar populated
+-- Boaty Mfg — USCG only, USCG sidecar populated. zip is a JSON NUMBER and prior_holders is JSON
+-- null on purpose: the real mart JSONB carries numeric zips and can re-introduce a null array, which
+-- 500'd /firms/{id} before the model coercion fix (handover-usda-uscg-firm-sidecar-500-2026-06-20).
 ('55555555555555555555555555555555', 'Boaty Mfg', 'boaty mfg', '["Boaty Mfg"]',
  '["BMC"]', '[]', 1, 1, '2026-02-10 06:00:00+00', '2026-02-10 06:00:00+00',
  '["manufacturer"]', '{"USCG": 1}', 1, null,
- '[{"mic": "BMC", "company_name": "Boaty Mfg", "city": "Miami", "state": "FL", "status": "Active", "mic_has_prior_holder": false, "prior_holders": []}]',
+ '[{"mic": "BMC", "company_name": "Boaty Mfg", "city": "Miami", "state": "FL", "zip": 33101, "status": "Active", "mic_has_prior_holder": false, "prior_holders": null}]',
  null),
 -- MultiCorp — CROSS-SOURCE (FDA + USDA), two sidecars populated
 ('cccccccccccccccccccccccccccccccc', 'MultiCorp LLC', 'multicorp', '["MultiCorp LLC", "Multi Corp"]',

@@ -177,7 +177,7 @@ tests/
 
 **Integration tests** (`tests/integration/`) spin up a real Postgres 16 instance seeded with `seed_gold.sql`, wire it into a running `create_app()` via `app.dependency_overrides`, and send HTTP requests through `httpx.AsyncClient` with `ASGITransport`. The DB resolution order (from `tests/integration/conftest.py`):
 
-1. `TEST_DATABASE_URL` env var — used by CI's `postgres:16` service (set at `.github/workflows/ci.yml:34`).
+1. `TEST_DATABASE_URL` env var — used by CI's `postgres:16` service (set in `.github/workflows/ci.yml`).
 2. testcontainers `postgres:16` — requires Docker running locally.
 3. Skip — the unit suite still runs on machines without Docker.
 

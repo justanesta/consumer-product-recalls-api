@@ -18,14 +18,14 @@ from recalls_api.queries import products as pq
 router = APIRouter(prefix="/products", tags=["products"])
 
 _DESC = (
-    "Searches recalled products. Keyword (`q`) is a Postgres full-text search over product "
-    "name, description, recall title, and firm name, ranked by relevance (`rank`); "
-    "token/prefix matching only, NO fuzzy/typo search. Identifier (`hin`, `model`) are exact "
-    "matches. `upc` is matched at the RECALL level via containment (the per-product UPC field "
-    "is empty), so each hit carries `upc_is_recall_level: true` — a miss means no recall lists "
-    "that UPC, not that the product was never recalled. Supply at least one of q, hin, model, "
-    "upc (else 422). Precedence when several given: q > hin/model > upc. `source` AND-s any path "
-    "and accepts multiple values (repeat or comma-separate) for any-of (OR)."
+    'Search recalled products ("is my product recalled?"). Keyword (`q`) is a full-text search '
+    "over product name, description, recall title, and firm, ranked by relevance (`rank`); whole "
+    "words and prefixes only, no fuzzy or typo search. `hin` and `model` are exact-match lookups. "
+    "`upc` matches at the recall level, so each hit carries `upc_is_recall_level: true`; a miss "
+    "means no recall lists that UPC, not that the product is safe. Supply at least one of `q`, "
+    "`hin`, `model`, or `upc` (otherwise 422); if several are given, `q` wins, then `hin`/`model`, "
+    "then `upc`. `source` narrows any of these and accepts multiple values (repeat or "
+    "comma-separate)."
 )
 
 
@@ -47,16 +47,28 @@ async def search_products(
     page: Annotated[deps.PaginationParams, Depends(deps.pagination_params)],
     q: Annotated[
         str | None,
-        Query(min_length=2, max_length=200, description="Keywords (Postgres websearch)."),
+        Query(min_length=2, max_length=200, description="Keywords to search for."),
     ] = None,
-    hin: Annotated[str | None, Query(max_length=64, description="Exact USCG Hull ID.")] = None,
+    hin: Annotated[
+        str | None, Query(max_length=64, description="Exact Hull ID (USCG boats).")
+    ] = None,
     model: Annotated[str | None, Query(max_length=128, description="Exact product model.")] = None,
     upc: Annotated[
-        str | None, Query(max_length=32, description="UPC — matched recall-level via containment.")
+        str | None,
+        Query(
+            max_length=32,
+            description=(
+                "Look up recalled products by 12-digit UPC barcode. Matches at the recall level. "
+                "UPC data is sparse and comes only from CPSC (about 5% of CPSC recalls; absent for "
+                "FDA, USDA, NHTSA, and USCG). A miss means no recall lists that UPC, **not** that "
+                "the product is safe."
+            ),
+            examples=["012345678905"],
+        ),
     ] = None,
     source: Annotated[
         deps.SourceList,
-        Query(description="Optional source filter, AND-ed; repeat/comma-separate for any-of (OR)."),
+        Query(description="Optional agency filter; repeat/comma-separate to match any of several."),
     ] = None,
 ) -> Page[ProductSearchHit]:
     # Precedence q > identifier > upc; require at least one selector (422 otherwise).

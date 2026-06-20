@@ -17,92 +17,90 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from recalls_api.models.common import FirmRef, Source, flatten_upcs
+from recalls_api.models.descriptions import D_CLASSIFICATION
 
 # --- Shared descriptions for the summary-subset columns (identical on Summary & Detail) ---
 _D_RECALL_EVENT_ID = (
-    "Opaque surrogate id for one recall event, stable across re-extractions: md5('<SOURCE>|<source "
-    "recall key>'), reused verbatim from silver (ADR 0038). Not a raw agency id — pair source with "
-    "source_recall_id for the human-facing key. Sources: all five."
+    "Stable, opaque id for one recall event; it does not change between data refreshes. This is "
+    "not the agency's own recall number. For the human-facing key, pair `source` with "
+    "`source_recall_id`. Sources: all five."
 )
-_D_SOURCE = "Originating agency feed (closed enum): CPSC, FDA, USDA, NHTSA, USCG. Always populated."
+_D_SOURCE = "The issuing agency: CPSC, FDA, USDA, NHTSA, or USCG. Always present."
 _D_SOURCE_RECALL_ID = (
-    "Agency-native recall identifier; meaning varies by source — CPSC RecallNumber, FDA "
-    "RECALLEVENTID, USDA field_recall_number (DDD-YYYY), NHTSA CAMPNO, USCG recall Number. Pair "
-    "with source for global identity. Always populated."
+    "Each agency's own recall identifier; its form varies by agency (e.g. CPSC recall number, FDA "
+    "event id, USDA's DDD-YYYY number, NHTSA campaign number, USCG recall number). Pair with "
+    "`source` for a globally unique key. Always present."
 )
 _D_TITLE = (
-    "Human-readable recall headline. Native title for CPSC/USDA; synthesized as '<recall-id> — "
-    "<firm/model name>' for FDA/NHTSA/USCG (no native title). Effectively always populated."
+    "The recall's headline. CPSC and USDA provide one directly; for FDA, NHTSA, and USCG (which "
+    "have none) it is built from the recall id and the firm or model name. Effectively always "
+    "present."
 )
 _D_URL = (
-    "Public detail-page URL for the recall. Sources: CPSC, USDA, USCG (null for FDA/NHTSA, which "
-    "provide no per-recall detail URL)."
+    "Link to the recall's public detail page. Sources: CPSC, USDA, USCG (null for FDA and NHTSA, "
+    "which don't publish a per-recall page)."
 )
 _D_ANNOUNCED_AT = (
-    "Date the recall was first announced/initiated, conformed across all five sources. Nullable: "
-    "~20 FDA events lack a trustworthy initiation date. Use published_at when a guaranteed date is "
-    "required. Sources: all five."
+    "When the recall was first announced or initiated. Null for about 20 FDA recalls that have no "
+    "reliable announcement date; use `published_at` when you need a date that is always present. "
+    "Sources: all five."
 )
 _D_PUBLISHED_AT = (
-    "Last-published/modified date, coalesced per source to always be present — the guaranteed "
-    "sort/pagination key (contrast nullable announced_at). Sources: all five."
+    "When the recall was last published or updated. Always present, and the key used for sorting "
+    "and pagination (unlike `announced_at`, which can be null). For NHTSA this is really a "
+    "record-creation date, since NHTSA does not publish a last-modified date. Sources: all five."
 )
-_D_CLASSIFICATION = (
-    "Recall severity/hazard classification in the source's NATIVE vocabulary (FDA: 1/2/3, NC=Not "
-    "Yet Classified; USDA: Class I/II/III, Public Health Alert; USCG: H/L/M/S). NOT normalized "
-    "across sources. Sources: FDA, USDA, USCG (null for CPSC/NHTSA)."
-)
+# classification is shared across recalls/products/stats, centralized in models.descriptions so the
+# USCG H/L/M/S caveat can't drift across the three modules.
+_D_CLASSIFICATION = D_CLASSIFICATION
 _D_RISK_LEVEL = (
-    "USDA health-risk label derived 1:1 from the USDA classification (e.g. 'High - Class I', 'Low "
-    "- Class II', 'Marginal - Class III', 'Public Health Alert'). Sources: USDA only (null for "
-    "CPSC/FDA/NHTSA/USCG)."
+    "USDA's health-risk label, which maps directly to its classification (e.g. 'High - Class I', "
+    "'Low - Class II', 'Marginal - Class III', 'Public Health Alert'). Sources: USDA only (null "
+    "for the others)."
 )
 _D_LIFECYCLE_STATUS = (
-    "Recall lifecycle/status in the source's native vocabulary (FDA: Ongoing/Completed/Terminated; "
-    "USDA: Active Recall/Closed Recall/Public Health Alert; USCG: Open/Closed). NOT normalized; "
-    "see is_active for a conformed boolean. Sources: FDA, USDA, USCG (null for CPSC/NHTSA)."
+    "The recall's status in each agency's own words (FDA: Ongoing/Completed/Terminated; USDA: "
+    "Active Recall/Closed Recall/Public Health Alert; USCG: Open/Closed). Not standardized across "
+    "agencies; see `is_active` for a single yes/no. Sources: FDA, USDA, USCG (null for CPSC/NHTSA)."
 )
 _D_IS_ACTIVE = (
-    "Conformed tri-state flag for whether the recall is still active, derived from each source's "
-    "lifecycle field (USDA Public Health Alert counts as active). Sources: FDA, USDA, USCG (null "
-    "for CPSC/NHTSA, which have no lifecycle concept and so match neither true nor false)."
+    "Whether the recall is still active, based on each agency's status (a USDA Public Health Alert "
+    "counts as active). Null for CPSC and NHTSA, which don't track a status, so they match neither "
+    "true nor false. Sources: FDA, USDA, USCG."
 )
 _D_REASON_CATEGORY = (
-    "Categorical recall-reason tokens from USDA's FSIS taxonomy (comma-joined, e.g. 'Unreported "
-    "Allergens, Misbranding'). Sources: USDA only (null for CPSC/FDA/NHTSA/USCG, whose reasons are "
-    "free text in recall_reason)."
+    "USDA's categorized recall reasons, comma-joined (e.g. 'Unreported Allergens, Misbranding'). "
+    "Sources: USDA only; for the other agencies the reason is free text in `recall_reason`."
 )
 _D_DISTRIBUTION_SCOPE = (
-    "Conformed distribution-breadth enum, always populated: Nationwide, International, Regional, "
-    "or Unspecified. Classified from real distribution text for FDA/USDA; CPSC/USCG default to "
-    "Unspecified and NHTSA to Nationwide. Sources: all five."
+    "How widely the product was distributed, always present: Nationwide, International, Regional, "
+    "or Unspecified. Derived from distribution text for FDA and USDA; CPSC and USCG default to "
+    "Unspecified, NHTSA to Nationwide. Sources: all five."
 )
 _D_PRIMARY_FIRM_NAME = (
-    "Primary display firm for the recall — the canonical firm name picked by role priority "
-    "(manufacturer > establishment > filer > importer > distributor, then alphabetical). Null only "
-    "if no firm resolves. Sources: all five."
+    "The recall's main firm, chosen by role priority (manufacturer, then establishment, filer, "
+    "importer, distributor, then alphabetical). Null only when no firm could be matched. Sources: "
+    "all five."
 )
 _D_FIRM_COUNT = (
-    "Count of DISTINCT firms linked to this recall across all roles (a firm in multiple roles "
-    "counts once, so this may be less than len(firms)). 0 when no firm resolves. Sources: all "
-    "five."
+    "Number of distinct firms linked to this recall across all roles. A firm with several roles "
+    "counts once, so this can be less than the number of entries in `firms`. 0 when none matched. "
+    "Sources: all five."
 )
 _D_PRODUCT_COUNT = (
-    "Number of distinct product rows for this recall. CPSC/FDA/NHTSA can exceed 1; USDA and USCG "
-    "are always 1 (modeled one-product-per-recall). Never null. Sources: all five."
+    "Number of distinct products on this recall. CPSC, FDA, and NHTSA can have several; USDA and "
+    "USCG always have one. Never null. Sources: all five."
 )
 _D_HAS_BEEN_EDITED = (
-    "True if the pipeline has detected at least one editorially-meaningful change to a tracked "
-    "event field (recall_reason, classification, lifecycle_status, title, terminated_at) by "
-    "diffing consecutive bronze snapshots; false otherwise. Observed-edit evidence, NOT a flag of "
-    "an official agency amendment — cosmetic/whitespace changes are suppressed, tracked fields "
-    "vary by source, and detection is bounded by snapshot retention and a pipeline reseed (false "
-    "can mean 'no change seen since the last reseed'). Synthesized; populated for all sources."
+    "True if the pipeline has spotted at least one meaningful change to a tracked field (recall "
+    "reason, classification, status, title, or termination date) since it began tracking this "
+    "recall. It is evidence of an observed edit, not an official agency amendment, and it carries "
+    "no date. Present for all sources."
 )
 
 
 class RecallSummary(BaseModel):
-    """The list projection — the small, list-relevant subset (not the full wide row)."""
+    """A recall as it appears in list results (the commonly used fields, not the full record)."""
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -132,19 +130,19 @@ class RecallSummary(BaseModel):
 
 
 class RecallSearchHit(RecallSummary):
-    """A ``RecallSummary`` plus its FTS relevance ``rank`` (``GET /recalls/search``)."""
+    """A recall list item plus a search relevance ``rank`` (from ``GET /recalls/search``)."""
 
     rank: float = Field(
         description=(
-            "Full-text relevance (ts_rank_cd over the recall search_vector, weighted "
-            "title>brand>cause>harm). Higher is more relevant, but scores are not comparable "
-            "across queries. Computed per request; present only on the /recalls/search path."
+            "Search relevance score (higher is more relevant), weighted toward title, then brand, "
+            "cause, and harm. Scores are not comparable between different queries. Computed per "
+            "request; present only on `/recalls/search`."
         )
     )
 
 
 class RecallDetail(BaseModel):
-    """The full wide row: summary subset + narrative, geo, lifecycle, and the jsonb rollups."""
+    """A recall's full record: list fields, narrative, geography, lifecycle, and related lists."""
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -170,103 +168,99 @@ class RecallDetail(BaseModel):
     recall_reason: str | None = Field(
         default=None,
         description=(
-            "Free-text recall/defect narrative, conformed across sources (CPSC Description, FDA "
-            "reason-for-recall, USDA HTML summary, NHTSA defect summary, USCG short problem note). "
-            "Content type and length vary by source; USDA is HTML-encoded and USCG is truncated to "
-            "~25 chars. Sources: all five."
+            "The recall or defect narrative, in free text. What it contains varies by agency (CPSC "
+            "description, FDA reason for recall, USDA summary, NHTSA defect summary, USCG short "
+            "problem note); USDA may contain HTML and USCG is truncated to about 25 characters. "
+            "Sources: all five."
         ),
     )
     corrective_action: str | None = Field(
         default=None,
         description=(
-            "Free-text corrective-action / remedy narrative (what the manufacturer and consumer "
-            "should do). Sources: NHTSA only (null for CPSC/FDA/USDA/USCG in this model)."
+            "What the manufacturer and consumer should do, in free text. Sources: NHTSA only (null "
+            "for the others)."
         ),
     )
     consequence_of_defect: str | None = Field(
         default=None,
         description=(
-            "Free-text description of what can happen if the defect is not remedied "
-            "(harm/consequence). Sources: NHTSA only (null for CPSC/FDA/USDA/USCG)."
+            "What can happen if the defect is not fixed, in free text. Sources: NHTSA only (null "
+            "for the others)."
         ),
     )
     # geo: a scalar prose string vs the parsed codes array (do NOT conflate)
     distribution_states: str | None = Field(
         default=None,
         description=(
-            "USDA distribution-states as a raw comma-joined string (e.g. 'Nationwide', 'Arizona, "
-            "California') — prose, not parsed codes. For machine-readable geography use "
-            "distribution_state_codes. Sources: USDA only (null for CPSC/FDA/NHTSA/USCG)."
+            "USDA's distribution states as a plain comma-joined string (e.g. 'Nationwide' or "
+            "'Arizona, California'). For parsed two-letter codes use `distribution_state_codes` "
+            "instead. Sources: USDA only (null for the others)."
         ),
     )
     distribution_state_codes: list[str] | None = Field(
         default=None,
         description=(
-            "USPS 2-letter state/territory codes for where the recalled product was distributed "
-            "(initial distribution area). Null when no geography parsed; an empty array indicates "
-            "a foreign-country-only recall. A precision-first parse (absence of a code is not "
-            "proof of non-distribution). Sources: FDA, USDA (null for CPSC/NHTSA/USCG)."
+            "Two-letter US state and territory codes for where the product was distributed. Null "
+            "when no geography could be parsed; an empty list means a foreign-only recall. Parsed "
+            "conservatively, so a missing code is not proof the product was not sold there. "
+            "Sources: FDA, USDA (null for CPSC/NHTSA/USCG)."
         ),
     )
     distribution_country_codes: list[str] | None = Field(
         default=None,
         description=(
-            "ISO-3166-1 alpha-2 codes for the FOREIGN countries the product was distributed to (US "
-            "excluded by design — domestic geography is distribution_state_codes). Null when no "
-            "geography parsed; an empty array indicates a domestic-only recall. Sources: FDA (null "
-            "for CPSC/USDA/NHTSA/USCG — the USDA path exists but field_states is states-only "
-            "today)."
+            "Two-letter codes for the foreign countries the product was distributed to (the US is "
+            "excluded by design; for US geography use `distribution_state_codes`). Null when no "
+            "geography could be parsed; an empty list means a domestic-only recall. Sources: FDA "
+            "(null for CPSC, USDA, NHTSA, and USCG; USDA currently provides states only)."
         ),
     )
     # jsonb rollups (un-coalesced -> normalize None to [])
     hazards: list[Any] | None = Field(
         default=None,
         description=(
-            "CPSC structured hazard array (jsonb objects with a free-text 'Name'; categorical "
-            "HazardType/HazardTypeID are empty at source). Sources: CPSC only (null for "
-            "FDA/USDA/NHTSA/USCG). NHTSA's harm narrative is in consequence_of_defect."
+            "CPSC's structured hazard list (each entry has a free-text name; the category fields "
+            "are empty at the source). Sources: CPSC only (null for the others). NHTSA's harm "
+            "description is in `consequence_of_defect` instead."
         ),
     )
     product_upcs: list[str] = Field(
         default_factory=list,
         description=(
-            "Recall-level product UPC codes (gold stores them as [{upc:…}] objects; the API "
-            "flattens to bare strings, [] when absent). Sources: CPSC only and sparse (~5% of CPSC "
-            "recalls); empty for FDA/USDA/NHTSA/USCG."
+            "Recall-level UPC codes (empty list when absent). Sources: CPSC only and sparse (about "
+            "5% of CPSC recalls); empty for FDA, USDA, NHTSA, and USCG."
         ),
     )
     product_names: list[str] = Field(
         default_factory=list,
         description=(
-            "Deduplicated array of distinct product names (never null; [] when empty). "
-            "Source-dependent semantics: CPSC = product name; USCG = boat model name; FDA = the "
-            "product DESCRIPTION text; USDA = the recall TITLE; NHTSA = the COMPONENT description. "
-            "Sources: all five."
+            "Distinct product names, de-duplicated (never null; empty list when none). What this "
+            "means varies by agency: CPSC product name, USCG boat model name, FDA product "
+            "description, USDA recall title, NHTSA component description. Sources: all five."
         ),
     )
     models: list[str] = Field(
         default_factory=list,
         description=(
-            "Deduplicated array of product model identifiers (never null; [] when empty). "
-            "Populated only for NHTSA (MODELTXT, e.g. 'F-150'); always [] for CPSC, FDA, USDA, "
-            "USCG. Sources: NHTSA only."
+            "Distinct product model identifiers, de-duplicated (never null; empty list when none). "
+            "Populated only for NHTSA (e.g. 'F-150'); always empty for the others. Sources: NHTSA "
+            "only."
         ),
     )
     hins: list[str] = Field(
         default_factory=list,
         description=(
-            "Deduplicated array of USCG Hull Identification Numbers (the boating analog of a "
-            "VIN/UPC; never null, [] when empty). USCG-only — always [] for CPSC, FDA, USDA, "
-            "NHTSA; only ~54% of USCG recalls carry a real HIN. Sources: USCG only."
+            "Distinct USCG Hull Identification Numbers, de-duplicated (the boating equivalent of a "
+            "VIN; never null, empty list when none). USCG only, and only about 54% of USCG recalls "
+            "carry a real HIN. Sources: USCG only."
         ),
     )
     firms: list[FirmRef] = Field(
         default_factory=list,
         description=(
-            "Array of all firms tied to this recall, one object per firm-role ({firm_id, name, "
-            "role, match_confidence}), ordered by role then name. A firm in multiple roles appears "
-            "multiple times, so len(firms) can exceed firm_count. Always a (possibly empty) array, "
-            "never null. Sources: all five."
+            "All firms tied to this recall, one entry per firm-role, ordered by role then name. A "
+            "firm with several roles appears more than once, so this can be longer than "
+            "`firm_count`. Always a list (possibly empty), never null. Sources: all five."
         ),
     )
 
