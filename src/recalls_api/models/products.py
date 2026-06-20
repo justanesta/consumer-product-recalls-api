@@ -17,6 +17,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from recalls_api.models.common import Source, flatten_upcs
+from recalls_api.models.descriptions import D_CLASSIFICATION
 
 
 class ProductSearchHit(BaseModel):
@@ -108,14 +109,7 @@ class ProductSearchHit(BaseModel):
             "Sources: all five."
         ),
     )
-    classification: str | None = Field(
-        default=None,
-        description=(
-            "Recall severity/hazard classification in the source's native vocabulary (FDA 1/2/3, "
-            "NC; USDA Class I/II/III, Public Health Alert; USCG H/L/M/S). NOT normalized across "
-            "sources. Sources: FDA, USDA, USCG (null for CPSC/NHTSA)."
-        ),
-    )
+    classification: str | None = Field(default=None, description=D_CLASSIFICATION)
     risk_level: str | None = Field(
         default=None,
         description=(

@@ -43,8 +43,9 @@ _DETAIL_DESC = (
 _SEARCH_DESC = (
     "Recall-grain keyword search — Postgres full-text over the recall's title, product names, "
     "firm, and narrative (reason/consequence), ranked by relevance (`rank` = `ts_rank_cd`). "
-    "Token/prefix matching only; NO fuzzy/typo search. Unlike `/products/search` (product grain, "
-    "identifiers + UPC), this returns one row per recall, each linking to its detail route. All "
+    "Token/prefix matching only; NO fuzzy/typo search. Unlike `/products/search` (product grain — "
+    "identifiers and UPC lookup via `?upc=`), this returns one row per recall, each linking to its "
+    "detail route. All "
     "`/recalls` filters AND-in. Relevance-ordered keyset is not index-backed (the GIN serves the "
     "`@@` match, not the sort); the sort is over the matched set."
 )

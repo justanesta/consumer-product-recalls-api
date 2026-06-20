@@ -17,6 +17,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from recalls_api.models.common import FirmRef, Source, flatten_upcs
+from recalls_api.models.descriptions import D_CLASSIFICATION
 
 # --- Shared descriptions for the summary-subset columns (identical on Summary & Detail) ---
 _D_RECALL_EVENT_ID = (
@@ -49,11 +50,9 @@ _D_PUBLISHED_AT = (
     "record-creation date, not a last-modified (its flat file carries no last-modified field). "
     "Sources: all five."
 )
-_D_CLASSIFICATION = (
-    "Recall severity/hazard classification in the source's NATIVE vocabulary (FDA: 1/2/3, NC=Not "
-    "Yet Classified; USDA: Class I/II/III, Public Health Alert; USCG: H/L/M/S). NOT normalized "
-    "across sources. Sources: FDA, USDA, USCG (null for CPSC/NHTSA)."
-)
+# classification is shared across recalls/products/stats — centralized in models.descriptions so
+# the USCG H/L/M/S caveat (added 2026-06-20) can't drift across the three modules.
+_D_CLASSIFICATION = D_CLASSIFICATION
 _D_RISK_LEVEL = (
     "USDA health-risk label derived 1:1 from the USDA classification (e.g. 'High - Class I', 'Low "
     "- Class II', 'Marginal - Class III', 'Public Health Alert'). Sources: USDA only (null for "

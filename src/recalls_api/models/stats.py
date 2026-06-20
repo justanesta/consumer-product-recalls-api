@@ -13,6 +13,8 @@ from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from recalls_api.models.descriptions import D_CLASSIFICATION
+
 
 class StatsSource(StrEnum):
     """The ``fct_*`` source domain — the 5 agency feeds plus the synthesized ``ALL`` rollup.
@@ -91,13 +93,7 @@ class ClassificationCount(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     source: str = Field(description="Agency feed, or 'ALL'.")
-    classification: str | None = Field(
-        default=None,
-        description=(
-            "SOURCE-NATIVE classification (FDA 1/2/3/NC; USDA Class I/II/III + Public Health "
-            "Alert; USCG H/L/M/S; null = CPSC/NHTSA unclassified). NOT cross-source comparable."
-        ),
-    )
+    classification: str | None = Field(default=None, description=D_CLASSIFICATION)
     risk_level: str | None = Field(
         default=None, description="USDA-only health-risk label; null for the other sources."
     )

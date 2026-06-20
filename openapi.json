@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Consumer Product Recalls API",
-    "description": "Open, read-only API over the consumer product recalls gold marts (CPSC, FDA, USDA, NHTSA, USCG). Honest caveats: `is_active` is tri-state (CPSC/NHTSA carry no status -> null); `classification` is source-native and not comparable across sources; UPC search matches recall-level UPC arrays, not per-product UPC; there is no fuzzy/typo search.",
+    "description": "Open, read-only API over the consumer product recalls gold marts (CPSC, FDA, USDA, NHTSA, USCG). Honest caveats: `is_active` is tri-state (CPSC/NHTSA carry no status -> null); `classification` is source-native and not comparable across sources; UPC search matches recall-level UPC arrays, not per-product UPC; there is no fuzzy/typo search.\n\n**Common lookups:** by product name → `GET /products/search?q=`; by **UPC barcode** → `GET /products/search?upc=`; vehicle/boat by identifier → `GET /products/search?model=` / `?hin=`; one recall → `GET /recalls/{source}/{recall_id}`.",
     "version": "0.1.1"
   },
   "paths": {
@@ -459,7 +459,7 @@
           "recalls"
         ],
         "summary": "Search recalls by keyword (recall-grain full-text), with the same filters.",
-        "description": "Recall-grain keyword search — Postgres full-text over the recall's title, product names, firm, and narrative (reason/consequence), ranked by relevance (`rank` = `ts_rank_cd`). Token/prefix matching only; NO fuzzy/typo search. Unlike `/products/search` (product grain, identifiers + UPC), this returns one row per recall, each linking to its detail route. All `/recalls` filters AND-in. Relevance-ordered keyset is not index-backed (the GIN serves the `@@` match, not the sort); the sort is over the matched set.",
+        "description": "Recall-grain keyword search — Postgres full-text over the recall's title, product names, firm, and narrative (reason/consequence), ranked by relevance (`rank` = `ts_rank_cd`). Token/prefix matching only; NO fuzzy/typo search. Unlike `/products/search` (product grain — identifiers and UPC lookup via `?upc=`), this returns one row per recall, each linking to its detail route. All `/recalls` filters AND-in. Relevance-ordered keyset is not index-backed (the GIN serves the `@@` match, not the sort); the sort is over the matched set.",
         "operationId": "search_recalls_recalls_search_get",
         "parameters": [
           {
@@ -1028,10 +1028,13 @@
                   "type": "null"
                 }
               ],
-              "description": "UPC — matched recall-level via containment.",
+              "description": "Look up recalled products by 12-digit UPC barcode. Matched at the RECALL level via array containment — CPSC-sourced and sparse (~5% of CPSC recalls; empty for FDA/USDA/NHTSA/USCG). A miss means no recall lists that UPC, **not** that the product is safe.",
+              "examples": [
+                "012345678905"
+              ],
               "title": "Upc"
             },
-            "description": "UPC — matched recall-level via containment."
+            "description": "Look up recalled products by 12-digit UPC barcode. Matched at the RECALL level via array containment — CPSC-sourced and sparse (~5% of CPSC recalls; empty for FDA/USDA/NHTSA/USCG). A miss means no recall lists that UPC, **not** that the product is safe."
           },
           {
             "name": "source",
@@ -2010,7 +2013,7 @@
               }
             ],
             "title": "Classification",
-            "description": "SOURCE-NATIVE classification (FDA 1/2/3/NC; USDA Class I/II/III + Public Health Alert; USCG H/L/M/S; null = CPSC/NHTSA unclassified). NOT cross-source comparable."
+            "description": "Recall severity/hazard classification in the source's NATIVE vocabulary (FDA: 1/2/3, NC=Not Yet Classified; USDA: Class I/II/III, Public Health Alert; USCG: H/L/M/S). NOT normalized across sources. ⚠ USCG's H/L/M/S are passed through verbatim from the USCG directory; their official severity semantics are NOT publicly documented (the public USCG recall index exposes no severity; 33 CFR 179 defines none) — do NOT assume an ordered scale. Provisional working assumption (pending USCG confirmation): H/M/L ≈ High/Medium/Low; S unverified. Sources: FDA, USDA, USCG (null for CPSC/NHTSA)."
           },
           "risk_level": {
             "anyOf": [
@@ -2988,7 +2991,7 @@
               }
             ],
             "title": "Classification",
-            "description": "Recall severity/hazard classification in the source's native vocabulary (FDA 1/2/3, NC; USDA Class I/II/III, Public Health Alert; USCG H/L/M/S). NOT normalized across sources. Sources: FDA, USDA, USCG (null for CPSC/NHTSA)."
+            "description": "Recall severity/hazard classification in the source's NATIVE vocabulary (FDA: 1/2/3, NC=Not Yet Classified; USDA: Class I/II/III, Public Health Alert; USCG: H/L/M/S). NOT normalized across sources. ⚠ USCG's H/L/M/S are passed through verbatim from the USCG directory; their official severity semantics are NOT publicly documented (the public USCG recall index exposes no severity; 33 CFR 179 defines none) — do NOT assume an ordered scale. Provisional working assumption (pending USCG confirmation): H/M/L ≈ High/Medium/Low; S unverified. Sources: FDA, USDA, USCG (null for CPSC/NHTSA)."
           },
           "risk_level": {
             "anyOf": [
@@ -3151,7 +3154,7 @@
               }
             ],
             "title": "Classification",
-            "description": "Recall severity/hazard classification in the source's NATIVE vocabulary (FDA: 1/2/3, NC=Not Yet Classified; USDA: Class I/II/III, Public Health Alert; USCG: H/L/M/S). NOT normalized across sources. Sources: FDA, USDA, USCG (null for CPSC/NHTSA)."
+            "description": "Recall severity/hazard classification in the source's NATIVE vocabulary (FDA: 1/2/3, NC=Not Yet Classified; USDA: Class I/II/III, Public Health Alert; USCG: H/L/M/S). NOT normalized across sources. ⚠ USCG's H/L/M/S are passed through verbatim from the USCG directory; their official severity semantics are NOT publicly documented (the public USCG recall index exposes no severity; 33 CFR 179 defines none) — do NOT assume an ordered scale. Provisional working assumption (pending USCG confirmation): H/M/L ≈ High/Medium/Low; S unverified. Sources: FDA, USDA, USCG (null for CPSC/NHTSA)."
           },
           "risk_level": {
             "anyOf": [
@@ -3454,7 +3457,7 @@
               }
             ],
             "title": "Classification",
-            "description": "Recall severity/hazard classification in the source's NATIVE vocabulary (FDA: 1/2/3, NC=Not Yet Classified; USDA: Class I/II/III, Public Health Alert; USCG: H/L/M/S). NOT normalized across sources. Sources: FDA, USDA, USCG (null for CPSC/NHTSA).",
+            "description": "Recall severity/hazard classification in the source's NATIVE vocabulary (FDA: 1/2/3, NC=Not Yet Classified; USDA: Class I/II/III, Public Health Alert; USCG: H/L/M/S). NOT normalized across sources. ⚠ USCG's H/L/M/S are passed through verbatim from the USCG directory; their official severity semantics are NOT publicly documented (the public USCG recall index exposes no severity; 33 CFR 179 defines none) — do NOT assume an ordered scale. Provisional working assumption (pending USCG confirmation): H/M/L ≈ High/Medium/Low; S unverified. Sources: FDA, USDA, USCG (null for CPSC/NHTSA).",
             "examples": [
               "Class II"
             ]
@@ -3641,7 +3644,7 @@
               }
             ],
             "title": "Classification",
-            "description": "Recall severity/hazard classification in the source's NATIVE vocabulary (FDA: 1/2/3, NC=Not Yet Classified; USDA: Class I/II/III, Public Health Alert; USCG: H/L/M/S). NOT normalized across sources. Sources: FDA, USDA, USCG (null for CPSC/NHTSA).",
+            "description": "Recall severity/hazard classification in the source's NATIVE vocabulary (FDA: 1/2/3, NC=Not Yet Classified; USDA: Class I/II/III, Public Health Alert; USCG: H/L/M/S). NOT normalized across sources. ⚠ USCG's H/L/M/S are passed through verbatim from the USCG directory; their official severity semantics are NOT publicly documented (the public USCG recall index exposes no severity; 33 CFR 179 defines none) — do NOT assume an ordered scale. Provisional working assumption (pending USCG confirmation): H/M/L ≈ High/Medium/Low; S unverified. Sources: FDA, USDA, USCG (null for CPSC/NHTSA).",
             "examples": [
               "Class II"
             ]

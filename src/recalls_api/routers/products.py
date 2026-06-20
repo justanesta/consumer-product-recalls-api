@@ -52,7 +52,17 @@ async def search_products(
     hin: Annotated[str | None, Query(max_length=64, description="Exact USCG Hull ID.")] = None,
     model: Annotated[str | None, Query(max_length=128, description="Exact product model.")] = None,
     upc: Annotated[
-        str | None, Query(max_length=32, description="UPC — matched recall-level via containment.")
+        str | None,
+        Query(
+            max_length=32,
+            description=(
+                "Look up recalled products by 12-digit UPC barcode. Matched at the RECALL level "
+                "via array containment — CPSC-sourced and sparse (~5% of CPSC recalls; empty for "
+                "FDA/USDA/NHTSA/USCG). A miss means no recall lists that UPC, **not** that the "
+                "product is safe."
+            ),
+            examples=["012345678905"],
+        ),
     ] = None,
     source: Annotated[
         deps.SourceList,
