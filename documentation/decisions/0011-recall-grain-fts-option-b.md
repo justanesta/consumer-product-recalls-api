@@ -18,21 +18,21 @@ Option B was chosen. See also [recalls-search-api-plan.md](../../project_scope/r
 
 1. **Endpoint:** `GET /recalls/search` is declared in `routers/recalls.py` before `/{source}/{recall_id}` to prevent path ambiguity.
 
-2. **Match predicate:** `search_vector @@ websearch_to_tsquery('english', :q)`. `websearch_to_tsquery` is injection-safe and never raises on syntactically bad input. The `'english'` regconfig is passed as `sa.literal_column("'english'")`, not a bound param — the `regconfig` overload requires a SQL literal; a bound param resolves to the two-argument `(text, text)` overload, which does not exist and would raise at runtime. (`queries/recalls.py:191–194`)
+2. **Match predicate:** `search_vector @@ websearch_to_tsquery('english', :q)`. `websearch_to_tsquery` is injection-safe and never raises on syntactically bad input. The `'english'` regconfig is passed as `sa.literal_column("'english'")`, not a bound param — the `regconfig` overload requires a SQL literal; a bound param resolves to the two-argument `(text, text)` overload, which does not exist and would raise at runtime. (`_tsquery()` in `queries/recalls.py`)
 
-3. **Rank:** `ts_rank_cd(_RANK_WEIGHTS, search_vector, tsquery)` where `_RANK_WEIGHTS = sa.literal_column("'{0.1,0.2,0.4,1.0}'::float4[]")`. These weights map directly to the gold `setweight` buckets: `A=1.0 (title) > B=0.4 (brand/product) > C=0.2 (cause) > D=0.1 (harm)`. They match `ts_rank_cd`'s built-in defaults, so the query is correct out of the box and the weights can be re-tuned at query time without any gold rebuild. (`queries/recalls.py:184–188`)
+3. **Rank:** `ts_rank_cd(_RANK_WEIGHTS, search_vector, tsquery)` where `_RANK_WEIGHTS = sa.literal_column("'{0.1,0.2,0.4,1.0}'::float4[]")`. These weights map directly to the gold `setweight` buckets: `A=1.0 (title) > B=0.4 (brand/product) > C=0.2 (cause) > D=0.1 (harm)`. They match `ts_rank_cd`'s built-in defaults, so the query is correct out of the box and the weights can be re-tuned at query time without any gold rebuild. (in `queries/recalls.py`)
 
-4. **Keyset cursor shape:** `(rank: float, recall_event_id: str)` encoded as a base64url 2-tuple. Ranked sort uses `rank DESC, recall_event_id ASC` with the `rank_keyset_where()` seek-WHERE from `pagination.py`. (`routers/recalls.py:95–96`)
+4. **Keyset cursor shape:** `(rank: float, recall_event_id: str)` encoded as a base64url 2-tuple. Ranked sort uses `rank DESC, recall_event_id ASC` with the `rank_keyset_where()` seek-WHERE from `pagination.py`. (`search_recalls()` in `routers/recalls.py`)
 
 5. **Filter surface:** all `RecallFilters` (source, date ranges, `distribution_scope`, `distribution_state`, `distribution_country`, `lifecycle_status`, `source_recall_id`, `firm`) AND-in via the shared `recalls_predicates()` call — the same filter dep as `GET /recalls`.
 
-6. **Response model:** `Page[RecallSearchHit]`, where `RecallSearchHit(RecallSummary)` adds one field: `rank: float`. (`models/recalls.py:42–47`)
+6. **Response model:** `Page[RecallSearchHit]`, where `RecallSearchHit(RecallSummary)` adds one field: `rank: float`. (in `models/recalls.py`)
 
 ## Consequences
 
 **Accepted tradeoffs:**
 
-- The GIN index backs the `@@` match (filter phase) but not the `ts_rank_cd ORDER BY` (sort phase). The sort is over the matched set, not the full corpus, making deep pagination O(matched set). At the expected corpus size this is acceptable; the OpenAPI `_SEARCH_DESC` string documents this honestly (`routers/recalls.py:39–46`).
+- The GIN index backs the `@@` match (filter phase) but not the `ts_rank_cd ORDER BY` (sort phase). The sort is over the matched set, not the full corpus, making deep pagination O(matched set). At the expected corpus size this is acceptable; the OpenAPI `_SEARCH_DESC` string documents this honestly (`_SEARCH_DESC` in `routers/recalls.py`).
 - Typo/fuzzy search is explicitly not supported. `pg_trgm` is absent from Neon (pipeline ADR 0037 excluded it during firm-resolution work; GIN tsvector is the house standard). This is documented in the endpoint description and in `main.py`'s `_DESCRIPTION` block.
 - The `rank` float is JSON-safe and round-trips correctly through the base64url cursor codec. Rank values are not comparable across queries or rebuilds.
 

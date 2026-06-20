@@ -48,7 +48,7 @@ The `recalls-api` reads four dbt-materialized gold objects from the pipeline's N
 
 ### `recall_event_id`
 
-Computed in the API at `GET /recalls/{source}/{recall_id}` (`queries/recalls.py:82–84`):
+Computed in the API at `GET /recalls/{source}/{recall_id}` by `compute_recall_event_id()` (`queries/recalls.py`):
 
 ```python
 hashlib.md5(f"{source.upper()}|{recall_id}".encode()).hexdigest()

@@ -25,11 +25,11 @@ Finally, a role-level grant alone is insufficient: a future accidental `GRANT IN
 
 2. **Set `default_transaction_read_only = on` at the role level** — `ALTER ROLE recalls_readonly SET default_transaction_read_only = on;` — so every session opened by this role refuses writes regardless of what grants exist. (`project_scope/build/06-deployment-and-ops.md §3b`)
 
-3. **Set `default_transaction_read_only = on` per connection** in `db.py`'s `server_settings` connect arg. This is independent of the role setting: belt + suspenders. (`src/recalls_api/db.py:59`)
+3. **Set `default_transaction_read_only = on` per connection** in `db.py`'s `server_settings` connect arg. This is independent of the role setting: belt + suspenders. (`make_engine()` in `db.py`)
 
-4. **Assert read-only at boot.** `open_pool()` opens one test connection and executes `SHOW transaction_read_only`. If the result is not `"on"` and `settings.is_production` is true, it raises `RuntimeError("DB connection is NOT read-only in production — refusing to start.")` — a hard boot failure. (`src/recalls_api/db.py:82–88`)
+4. **Assert read-only at boot.** `open_pool()` opens one test connection and executes `SHOW transaction_read_only`. If the result is not `"on"` and `settings.is_production` is true, it raises `RuntimeError("DB connection is NOT read-only in production — refusing to start.")` — a hard boot failure. (`open_pool()` in `db.py`)
 
-5. **Use a separate env var `NEON_DATABASE_URL_RO`** (distinct from the pipeline's `NEON_DATABASE_URL`) so the two repos can never be accidentally wired to the same DSN. The field is `SecretStr`; a missing value raises `ValidationError` at boot. (`src/recalls_api/settings.py:28`)
+5. **Use a separate env var `NEON_DATABASE_URL_RO`** (distinct from the pipeline's `NEON_DATABASE_URL`) so the two repos can never be accidentally wired to the same DSN. The field is `SecretStr`; a missing value raises `ValidationError` at boot. (`neon_database_url_ro` in `settings.py`)
 
 ## Consequences
 

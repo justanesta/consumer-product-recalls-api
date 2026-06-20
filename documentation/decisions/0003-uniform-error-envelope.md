@@ -26,17 +26,17 @@ A public, unauthenticated API over a Neon-backed gold mart has three additional 
    ```json
    {"error": {"type": "<string>", "detail": "<string or array>", "request_id": "<uuid>"}}
    ```
-   Implemented as `ErrorEnvelope { error: ErrorDetail }` at `errors.py:65–72`. The `request_id` is read from the per-request `ContextVar` bound by `RequestIdMiddleware` so callers can correlate errors with operator logs.
+   Implemented as `ErrorEnvelope { error: ErrorDetail }` in `errors.py`. The `request_id` is read from the per-request `ContextVar` bound by `RequestIdMiddleware` so callers can correlate errors with operator logs.
 
 2. **`ApiError` hierarchy.** Four concrete subtypes carry `status_code` and `error_type` as class attributes: `ResourceNotFound` (404 / `not_found`), `InvalidParameter` (422 / `invalid_parameter`), `BadCursor` (400 / `bad_cursor`), `UpstreamUnavailable` (503 / `upstream_unavailable`). A single `_api_error_handler` covers all subtypes via FastAPI's MRO-based dispatch, and `UpstreamUnavailable` emits `Retry-After: 5`. *(Amended 2026-06-15: a fifth subtype `RateLimited` (429) was removed as dead code — it was never raised; the sole 429 path is `slowapi`'s `RateLimitExceeded` → `rate_limited_response()` with `Retry-After: 60`, see Consequences.)*
 
-3. **Dedicated DB error handler.** `_db_error_handler` (`errors.py:107`) is registered for `OperationalError`, `DBAPIError`, `SqlTimeoutError`, and `OSError`. It returns 503 + `Retry-After: 5` with the fixed message `"database temporarily unavailable"` and logs the raw exception via structlog. asyncpg's bare `OSError` path is explicitly covered because SQLAlchemy does not always wrap it.
+3. **Dedicated DB error handler.** `_db_error_handler` in `errors.py` is registered for `OperationalError`, `DBAPIError`, `SqlTimeoutError`, and `OSError`. It returns 503 + `Retry-After: 5` with the fixed message `"database temporarily unavailable"` and logs the raw exception via structlog. asyncpg's bare `OSError` path is explicitly covered because SQLAlchemy does not always wrap it.
 
-4. **FastAPI `RequestValidationError` reshaping.** `_validation_error_handler` (`errors.py:128`) converts FastAPI's native validation errors into the same envelope, preserving the per-field `{"loc": [...], "msg": "..."}` array as `detail`.
+4. **FastAPI `RequestValidationError` reshaping.** `_validation_error_handler` in `errors.py` converts FastAPI's native validation errors into the same envelope, preserving the per-field `{"loc": [...], "msg": "..."}` array as `detail`.
 
-5. **Opaque catch-all.** `_catch_all_handler` (`errors.py:118`) logs the full traceback via `structlog` and returns `{"error": {"type": "internal_error", "detail": "an unexpected error occurred"}}`. No SQL, DSN, or exception text ever reaches the caller regardless of future code paths.
+5. **Opaque catch-all.** `_catch_all_handler` in `errors.py` logs the full traceback via `structlog` and returns `{"error": {"type": "internal_error", "detail": "an unexpected error occurred"}}`. No SQL, DSN, or exception text ever reaches the caller regardless of future code paths.
 
-6. **OpenAPI visibility.** Each route decorator passes `responses=LIST_ERRORS` or `responses=ITEM_ERRORS` (`errors.py:84–85`), both referencing `{"model": ErrorEnvelope}`, so every documented error code and its envelope shape appear in `/openapi.json`.
+6. **OpenAPI visibility.** Each route decorator passes `responses=LIST_ERRORS` or `responses=ITEM_ERRORS` (defined in `errors.py`), both referencing `{"model": ErrorEnvelope}`, so every documented error code and its envelope shape appear in `/openapi.json`.
 
 ## Consequences
 

@@ -20,7 +20,7 @@ Two failure modes shaped this decision:
    (`NEON_DATABASE_URL_RO`) share a Neon project but bind different roles. A `SecretStr` field
    prevents the value from appearing in `repr()`, logs, or tracebacks. A distinct env-var name makes
    it structurally impossible to hand the API the write-capable DSN by accident
-   (`settings.py:26-27`).
+   (the `neon_database_url_ro` field on `Settings` in `settings.py`).
 
 See also: `project_scope/build/04-implementation-blueprint.md §settings.py` (design rationale) and
 `project_scope/deployment-plan.md §step 4` (operator wiring — `flyctl secrets set
@@ -41,11 +41,11 @@ NEON_DATABASE_URL_RO=...`).
    without requiring an operator to supply it.
 
 4. `get_settings()` is decorated `@lru_cache(maxsize=1)` — it constructs exactly once per process
-   lifetime (`settings.py:57`). Importing the module never constructs `Settings`.
+   lifetime (in `settings.py`). Importing the module never constructs `Settings`.
 
-5. The **first call to `get_settings()` is inside the FastAPI `lifespan`** (`main.py:39`): a missing
+5. The **first call to `get_settings()` is inside the FastAPI `lifespan`** (`main.py`): a missing
    DSN causes an immediate boot crash with a clear `ValidationError` before the server accepts any
-   traffic. `create_app()` also calls it at `main.py:52` (to read `log_level`), so a misconfigured
+   traffic. `create_app()` also calls it (to read `log_level`), so a misconfigured
    environment surfaces before the lifespan even runs.
 
 ## Consequences
