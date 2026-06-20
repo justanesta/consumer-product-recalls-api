@@ -82,11 +82,11 @@ An opaque cursor anchor generated per-source by the pipeline. Do not construct i
 
 | Response model | Mart | Notes |
 |---|---|---|
-| `RecallSummary` | `mart_recall_summary` | 18-column list projection; `distribution_scope` is NOT NULL in the mart |
+| `RecallSummary` | `mart_recall_summary` | 17-column list projection; `distribution_scope` is NOT NULL in the mart |
 | `RecallSearchHit` | `mart_recall_summary` | `RecallSummary` + computed `rank: float` |
-| `RecallDetail` | `mart_recall_summary` | Full row; `product_upcs`, `product_names`, `models`, `hins`, `firms` are left NULL by the mart when empty; the API `_none_to_list` validator (`models/recalls.py:104`) coerces them to `[]` at the response layer. (`hazards` is not coerced and may remain null.) |
-| `ProductSearchHit` | `mart_product_search` | 19 mart columns + optional computed `rank`; `upc_is_recall_level: True` is a synthetic API field (not a mart column) |
-| `FirmProfile` | `mart_firm_profile` | Full row; `firm_usda_attributes`, `firm_uscg_attributes`, `firm_fda_attributes` are JSON arrays of agency registration sidecars |
+| `RecallDetail` | `mart_recall_summary` | Full row; `product_upcs`, `product_names`, `models`, `hins`, `firms` are left NULL by the mart when empty; the API `_none_to_list` validator on `RecallDetail` coerces them to `[]` at the response layer. (`hazards` is not coerced and may remain null.) |
+| `ProductSearchHit` | `mart_product_search` | 18 mart columns + optional computed `rank`; `upc_is_recall_level: True` is a synthetic API field (not a mart column) |
+| `FirmProfile` | `mart_firm_profile` | Full row; `firm_usda_attributes`, `firm_uscg_attributes`, `firm_fda_attributes` are JSON arrays of agency registration sidecars. The API coerces sidecar values at the response boundary: numeric identifiers (`zip`, `fips_code`, `establishment_id`, `mic`) to strings, and a null `prior_holders` to `[]`. |
 
 See [api-reference.md](api-reference.md) for the per-endpoint field tables.
 
