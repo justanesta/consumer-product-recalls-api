@@ -11,7 +11,31 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+
+def _collapse_nonscalars(data: Any, keep_lists: frozenset[str] = frozenset()) -> Any:
+    """Collapse stray jsonb arrays/objects in a sidecar row to scalar strings.
+
+    USDA's establishment directory can deliver a string-typed field as a jsonb array — e.g. ``dbas``
+    and ``activities`` after the 2026-06 FSIS API change — where the wire contract is a scalar
+    string. ``coerce_numbers_to_str`` only handles numbers, so without this a single array- or
+    object-valued field raises a ResponseValidationError and 500s the whole firm response. This
+    mirrors the data side's ``jsonb_array_to_csv()`` and guards the sidecars against future shape
+    drift, not just today's fields: a list becomes a comma-joined string, an object its string form,
+    while scalars and legitimately list-typed fields (``keep_lists``) pass through untouched.
+    """
+    if not isinstance(data, dict):
+        return data
+    out: dict[str, Any] = {}
+    for key, value in data.items():
+        if key in keep_lists or not isinstance(value, list | dict):
+            out[key] = value
+        elif isinstance(value, list):
+            out[key] = ", ".join(str(item) for item in value)
+        else:
+            out[key] = str(value)
+    return out
 
 
 class UsdaEstablishment(BaseModel):
@@ -36,6 +60,13 @@ class UsdaEstablishment(BaseModel):
     circuit: str | None = None
     activities: str | None = None
     dbas: str | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _collapse_jsonb_arrays(cls, data: Any) -> Any:
+        # dbas/activities (and any future field) arrive as jsonb arrays from the FSIS establishment
+        # directory; collapse non-scalars to strings so one array field can't 500 the firm response.
+        return _collapse_nonscalars(data)
 
 
 class UscgManufacturer(BaseModel):
@@ -82,6 +113,12 @@ class UscgManufacturer(BaseModel):
         # only covers the sidecar LISTS, not this nested row field. Belt-and-suspenders -> [].
         return [] if v is None else v
 
+    @model_validator(mode="before")
+    @classmethod
+    def _collapse_jsonb_arrays(cls, data: Any) -> Any:
+        # prior_holders is a real list[str] and stays a list; every other field is a scalar string.
+        return _collapse_nonscalars(data, keep_lists=frozenset({"prior_holders"}))
+
 
 class FdaAttributes(BaseModel):
     """An FDA registration record for the firm."""
@@ -99,6 +136,11 @@ class FdaAttributes(BaseModel):
     firm_line2_adr: str | None = None
     firm_surviving_nam: str | None = None
     firm_surviving_fei: int | str | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _collapse_jsonb_arrays(cls, data: Any) -> Any:
+        return _collapse_nonscalars(data)
 
 
 class FirmProfile(BaseModel):

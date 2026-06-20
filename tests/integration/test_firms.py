@@ -39,6 +39,9 @@ async def test_firm_with_usda_sidecar(client: AsyncClient) -> None:
     # numeric zip/fips_code in the mart JSONB are coerced to strings on the wire (not a 500)
     assert est["zip"] == "72762"
     assert est["fips_code"] == "5007"
+    # dbas/activities arrive as jsonb arrays from the FSIS directory; collapsed to CSV (not a 500)
+    assert est["dbas"] == "TYSON, TYSON FOODS"
+    assert est["activities"] == "Slaughter, Processing"
 
 
 async def test_firm_with_uscg_sidecar(client: AsyncClient) -> None:

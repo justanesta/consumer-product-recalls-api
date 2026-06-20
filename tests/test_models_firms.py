@@ -59,6 +59,33 @@ def test_usda_establishment_coerces_numeric_identifiers() -> None:
     assert e.fips_code == "27053"
 
 
+def test_usda_establishment_collapses_jsonb_arrays() -> None:
+    # USDA's establishment directory delivers dbas/activities as jsonb arrays (2026-06 FSIS API
+    # change); coerce_numbers_to_str only handles numbers, so the str fields must collapse arrays to
+    # CSV (and an object to its string form) instead of 500ing the whole firm response.
+    e = UsdaEstablishment.model_validate(
+        {
+            "establishment_id": "M1",
+            "dbas": ["ACME", "ACME II"],
+            "activities": ["slaughter", "processing"],
+            "geolocation": {"lat": 1, "lon": 2},
+        }
+    )
+    assert e.dbas == "ACME, ACME II"
+    assert e.activities == "slaughter, processing"
+    assert isinstance(e.geolocation, str)  # an object collapses too, rather than 500ing
+
+
+def test_uscg_manufacturer_keeps_prior_holders_but_collapses_strays() -> None:
+    # prior_holders is a real list[str] and must stay a list; a stray array on a string field (dba)
+    # collapses to CSV.
+    m = UscgManufacturer.model_validate(
+        {"mic": "ABC", "prior_holders": ["OLD CO"], "dba": ["BRAND A", "BRAND B"]}
+    )
+    assert m.prior_holders == ["OLD CO"]
+    assert m.dba == "BRAND A, BRAND B"
+
+
 def test_uscg_manufacturer_coerces_numeric_and_null_prior_holders() -> None:
     m = UscgManufacturer.model_validate({"mic": 12345, "zip": 48108, "prior_holders": None})
     assert m.mic == "12345"
