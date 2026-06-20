@@ -45,7 +45,9 @@ _D_ANNOUNCED_AT = (
 )
 _D_PUBLISHED_AT = (
     "Last-published/modified date, coalesced per source to always be present — the guaranteed "
-    "sort/pagination key (contrast nullable announced_at). Sources: all five."
+    "sort/pagination key (contrast nullable announced_at). NHTSA's underlying field is a "
+    "record-creation date, not a last-modified (its flat file carries no last-modified field). "
+    "Sources: all five."
 )
 _D_CLASSIFICATION = (
     "Recall severity/hazard classification in the source's NATIVE vocabulary (FDA: 1/2/3, NC=Not "

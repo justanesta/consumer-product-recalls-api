@@ -169,8 +169,8 @@ Which of the five agency feeds populates each exposed field. This is the at-a-gl
 | `alternate_names` | n/a | n/a | n/a | n/a | n/a | derived enrichment (firm crosswalk) |
 | `total_recalls` | Y | Y | Y | Y | Y | distinct recalls, cross-source |
 | `active_recalls` | – | Y | Y | – | Y | only FDA/USDA/USCG can be active |
-| `first_recall_at` | Y | Y | Y | Y | Y | min(published_at) |
-| `last_recall_at` | Y | Y | Y | Y | Y | max(published_at) |
+| `first_recall_at` | Y | Y | Y | Y | Y | min(coalesce(announced_at, published_at)) — announce-date basis |
+| `last_recall_at` | Y | Y | Y | Y | Y | max(coalesce(announced_at, published_at)) — announce-date basis |
 | `roles` | Y | Y | Y | Y | Y | distinct roles |
 | `recalls_by_source` | Y | Y | Y | Y | Y | sparse {source → count} object |
 | `distinct_products` | Y | Y | Y | Y | Y | per-firm footprint (NOT global-distinct) |

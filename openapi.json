@@ -2406,7 +2406,7 @@
               }
             ],
             "title": "First Recall At",
-            "description": "Earliest recall publication timestamp for this firm (min of published_at — a per-source 'last published / record-created' date, not a uniform announcement date). Null only for a firm with no linked recall. Sources: all five."
+            "description": "Earliest recall date for this firm — min of coalesce(announced_at, published_at): the announce/initiation date, falling back to published_at where announced_at is null. Null only for a firm with no linked recall. Sources: all five."
           },
           "last_recall_at": {
             "anyOf": [
@@ -2419,7 +2419,7 @@
               }
             ],
             "title": "Last Recall At",
-            "description": "Most recent recall publication timestamp for this firm (max of published_at; same per-source caveat as first_recall_at). Null only for a firm with no linked recall. Sources: all five."
+            "description": "Most recent recall date for this firm — max of coalesce(announced_at, published_at) (same announce-date basis as first_recall_at). Null only for a firm with no linked recall. Sources: all five."
           },
           "roles": {
             "items": {
@@ -3139,7 +3139,7 @@
             "type": "string",
             "format": "date-time",
             "title": "Published At",
-            "description": "Last-published/modified date, coalesced per source to always be present — the guaranteed sort/pagination key (contrast nullable announced_at). Sources: all five."
+            "description": "Last-published/modified date, coalesced per source to always be present — the guaranteed sort/pagination key (contrast nullable announced_at). NHTSA's underlying field is a record-creation date, not a last-modified (its flat file carries no last-modified field). Sources: all five."
           },
           "classification": {
             "anyOf": [
@@ -3442,7 +3442,7 @@
             "type": "string",
             "format": "date-time",
             "title": "Published At",
-            "description": "Last-published/modified date, coalesced per source to always be present — the guaranteed sort/pagination key (contrast nullable announced_at). Sources: all five."
+            "description": "Last-published/modified date, coalesced per source to always be present — the guaranteed sort/pagination key (contrast nullable announced_at). NHTSA's underlying field is a record-creation date, not a last-modified (its flat file carries no last-modified field). Sources: all five."
           },
           "classification": {
             "anyOf": [
@@ -3629,7 +3629,7 @@
             "type": "string",
             "format": "date-time",
             "title": "Published At",
-            "description": "Last-published/modified date, coalesced per source to always be present — the guaranteed sort/pagination key (contrast nullable announced_at). Sources: all five."
+            "description": "Last-published/modified date, coalesced per source to always be present — the guaranteed sort/pagination key (contrast nullable announced_at). NHTSA's underlying field is a record-creation date, not a last-modified (its flat file carries no last-modified field). Sources: all five."
           },
           "classification": {
             "anyOf": [

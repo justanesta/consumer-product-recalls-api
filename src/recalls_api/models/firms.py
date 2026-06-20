@@ -172,17 +172,17 @@ class FirmProfile(BaseModel):
     first_recall_at: datetime | None = Field(
         default=None,
         description=(
-            "Earliest recall publication timestamp for this firm (min of published_at — a "
-            "per-source 'last published / record-created' date, not a uniform announcement date). "
+            "Earliest recall date for this firm — min of coalesce(announced_at, published_at): the "
+            "announce/initiation date, falling back to published_at where announced_at is null. "
             "Null only for a firm with no linked recall. Sources: all five."
         ),
     )
     last_recall_at: datetime | None = Field(
         default=None,
         description=(
-            "Most recent recall publication timestamp for this firm (max of published_at; same "
-            "per-source caveat as first_recall_at). Null only for a firm with no linked recall. "
-            "Sources: all five."
+            "Most recent recall date for this firm — max of coalesce(announced_at, published_at) "
+            "(same announce-date basis as first_recall_at). Null only for a firm with no linked "
+            "recall. Sources: all five."
         ),
     )
     roles: list[str] = Field(
