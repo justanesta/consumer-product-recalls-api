@@ -73,7 +73,7 @@ async def overview(conn: Annotated[AsyncConnection, Depends(deps.get_conn)]) -> 
     description=(
         "Recall counts per period (month, week, or year) for each agency, plus an `ALL` rollup. "
         "Periods are dated by when each recall was first announced, falling back to its publish "
-        "date when no announcement date is on record — so counts can differ from a publish-date "
+        "date when no announcement date is on record, so counts can differ from a publish-date "
         "view."
     ),
 )

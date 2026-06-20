@@ -34,7 +34,7 @@ _DESCRIPTION = (
     "recall's `is_active` flag is `null` (not false) for CPSC and NHTSA, which don't track an "
     "open/closed status; `classification` uses each agency's own severity scale and can't be "
     "compared across agencies; UPC search matches a whole recall, not an individual product; and "
-    "search is exact — a typo finds nothing."
+    "search is exact, so a typo finds nothing."
     "\n\n**Common lookups:** by product name → `GET /products/search?q=`; by **UPC barcode** → "
     "`GET /products/search?upc=`; vehicle or boat by identifier → `GET /products/search?model=` / "
     "`?hin=`; a single recall → `GET /recalls/{source}/{recall_id}`."

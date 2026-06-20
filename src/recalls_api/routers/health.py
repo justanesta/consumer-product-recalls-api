@@ -25,7 +25,7 @@ async def health() -> Health:
     "/health/db",
     response_model=DbHealth,
     responses=ERR_503,
-    summary="Readiness probe — verifies the read-only DB connection.",
+    summary="Readiness probe: verifies the database connection.",
 )
 async def health_db(conn: Annotated[AsyncConnection, Depends(deps.get_conn)]) -> DbHealth:
     """Readiness: SELECT 1 to Neon; a cold DB becomes 503 + Retry-After via the error handler."""

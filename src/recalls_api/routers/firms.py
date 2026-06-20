@@ -15,13 +15,13 @@ from recalls_api.queries import firms as q
 router = APIRouter(prefix="/firms", tags=["firms"])
 
 _DESC = (
-    "A single firm, merged across agencies — so a maker that appears under several (e.g. Honda "
+    "A single firm, merged across agencies, so a maker that appears under several (e.g. Honda "
     "under NHTSA and USCG) shows up as one profile. Includes recall counts, the per-agency "
     "breakdown (`recalls_by_source`), name variants, and agency registration records: "
     "`firm_usda_attributes` (USDA establishments), `firm_uscg_attributes` (USCG boat builders), "
     "and `firm_fda_attributes` (FDA-registered firms). Each set has a different shape and any may "
     "be empty; CPSC and NHTSA contribute none. `first_recall_at` and `last_recall_at` are null for "
-    "a firm with no matched recalls. The id is opaque — get it from a recall's `firms[].firm_id`."
+    "a firm with no matched recalls. The id is opaque; get it from a recall's `firms[].firm_id`."
 )
 
 

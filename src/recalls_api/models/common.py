@@ -26,7 +26,7 @@ def flatten_upcs(v: Any) -> Any:
 
 
 class Source(StrEnum):
-    """The one closed cross-source domain (uppercase). Free 422 on a bad path/query value."""
+    """The issuing agency: CPSC, FDA, USDA, NHTSA, or USCG."""
 
     CPSC = "CPSC"
     FDA = "FDA"
@@ -36,7 +36,7 @@ class Source(StrEnum):
 
 
 class DistributionScope(StrEnum):
-    """Closed 4-value gold enum (dbt accepted_values; 100% NOT NULL). Free 422 on a bad value."""
+    """How widely a product was distributed: Nationwide, Regional, International, or Unspecified."""
 
     NATIONWIDE = "Nationwide"
     REGIONAL = "Regional"
@@ -45,7 +45,7 @@ class DistributionScope(StrEnum):
 
 
 class Page[T](BaseModel):
-    """Keyset-pagination envelope. ``next_cursor`` is opaque; clients echo it."""
+    """A page of results. Pass ``next_cursor`` back as ``cursor`` to fetch the next page."""
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -58,15 +58,15 @@ class Page[T](BaseModel):
 
 
 class FirmRef(BaseModel):
-    """An element of a recall's ``firms[]`` rollup; ``firm_id`` links to ``GET /firms/{id}``."""
+    """One firm tied to a recall; ``firm_id`` links to ``GET /firms/{firm_id}``."""
 
     model_config = ConfigDict(from_attributes=True)
 
     firm_id: str = Field(
         examples=["7d2c1e5b8a40f0a9f4c7e3a1e3a1c6f2"],
-        description="Canonical firm cluster id; use with GET /firms/{firm_id}.",
+        description="A firm's id; use with `GET /firms/{firm_id}`.",
     )
-    name: str = Field(examples=["Acme Corporation"], description="Canonical (cleaned) firm name.")
+    name: str = Field(examples=["Acme Corporation"], description="The firm's cleaned-up name.")
     # role / match_confidence are closed UPSTREAM but surfaced as free strings: the API does not let
     # clients filter on them and must not break if the pipeline adds a value.
     role: str = Field(
@@ -78,7 +78,7 @@ class FirmRef(BaseModel):
     )
     match_confidence: str = Field(
         examples=["exact_name"],
-        description="Firm-resolution path/quality for this link (e.g. exact_name, fei_exact).",
+        description="How this firm was matched to the recall (e.g. exact_name, fei_exact).",
     )
 
 
@@ -90,7 +90,7 @@ class Health(BaseModel):
 
 
 class DbHealth(BaseModel):
-    """Readiness body (returned only when the SELECT 1 round-trip succeeds)."""
+    """Readiness body, returned only when the database is reachable."""
 
     status: Literal["ok"] = "ok"
     database: Literal["reachable"] = "reachable"

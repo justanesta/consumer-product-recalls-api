@@ -14,11 +14,11 @@ from __future__ import annotations
 # the recall regulation — defines no such taxonomy). The caveat below keeps programmatic consumers
 # from treating them as a confirmed ordered scale; it mirrors the tone on UscgManufacturer.status.
 D_CLASSIFICATION = (
-    "Recall severity/hazard classification in the source's NATIVE vocabulary (FDA: 1/2/3, NC=Not "
-    "Yet Classified; USDA: Class I/II/III, Public Health Alert; USCG: H/L/M/S). NOT normalized "
-    "across sources. ⚠ USCG's H/L/M/S are passed through verbatim from the USCG directory; their "
-    "official severity semantics are NOT publicly documented (the public USCG recall index exposes "
-    "no severity; 33 CFR 179 defines none) — do NOT assume an ordered scale. Provisional working "
-    "assumption (pending USCG confirmation): H/M/L ≈ High/Medium/Low; S unverified. Sources: FDA, "
-    "USDA, USCG (null for CPSC/NHTSA)."
+    "Recall severity in each agency's own scale (FDA: 1/2/3, NC = Not Yet Classified; USDA: Class "
+    "I/II/III, Public Health Alert; USCG: H/L/M/S). Not comparable across agencies. ⚠ USCG's "
+    "H/L/M/S are passed through from the USCG directory, but their official meaning is not "
+    "publicly documented (the public USCG recall index shows no severity, and 33 CFR 179 defines "
+    "none), so do not assume an ordered scale. Best current guess, pending confirmation from USCG: "
+    "H/M/L roughly map to High/Medium/Low, and S is unverified. Sources: FDA, USDA, USCG (null for "
+    "CPSC/NHTSA)."
 )

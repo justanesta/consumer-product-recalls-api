@@ -146,7 +146,7 @@ def recall_filters(
     distribution_scope: Annotated[
         _ScopeList,
         Query(
-            description="Distribution scope(s) — Nationwide, Regional, International, or "
+            description="Distribution scope(s): Nationwide, Regional, International, or "
             "Unspecified; repeat/comma-separate to match any of several."
         ),
     ] = None,
@@ -184,7 +184,7 @@ def recall_filters(
         Query(
             pattern=r"^[0-9a-f]{32}$",
             description="A firm's id; returns every recall where this firm appears in any role "
-            "(including co-recalled firms) — unlike `firm`, which is a primary-name substring. "
+            "(including co-recalled firms), unlike `firm`, which is a primary-name substring. "
             "Get it from a recall's `firms[].firm_id`.",
         ),
     ] = None,

@@ -18,10 +18,10 @@ router = APIRouter(prefix="/recalls", tags=["recalls"])
 
 _LIST_DESC = (
     "Recalls across all five agencies, newest first (by when each was most recently published or "
-    "updated), with cursor pagination — pass a page's `next_cursor` back as `cursor` for the next "
+    "updated), with cursor pagination. Pass a page's `next_cursor` back as `cursor` for the next "
     "page. Filters combine with AND across fields; the categorical ones (`source`, "
     "`classification`, `lifecycle_status`, `distribution_scope`, `distribution_state`, "
-    "`distribution_country`) accept multiple values — repeat the param or comma-separate them "
+    "`distribution_country`) accept multiple values: repeat the param or comma-separate them "
     "(`?source=CPSC,FDA`) to match any of them within that field. Each filter notes its own "
     "caveats below. The total count is omitted unless you pass `with_total=true`."
 )
@@ -33,7 +33,7 @@ _DETAIL_DESC = (
     "prose, separate from the parsed `distribution_state_codes`."
 )
 _SEARCH_DESC = (
-    "Keyword search over recalls — full-text across each recall's title, product names, firm, and "
+    "Keyword search over recalls, full-text across each recall's title, product names, firm, and "
     "narrative, ranked by relevance (`rank`). Matches whole words and prefixes only; no fuzzy or "
     "typo search. Unlike `/products/search` (which is product-level and also does identifier and "
     "UPC lookups via `?upc=`), this returns one row per recall, each linking to its detail route. "

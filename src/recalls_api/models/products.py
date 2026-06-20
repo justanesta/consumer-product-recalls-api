@@ -26,101 +26,99 @@ class ProductSearchHit(BaseModel):
 
     recall_product_id: str = Field(
         description=(
-            "Stable surrogate primary key for one recalled product line, reused verbatim from "
-            "silver (md5, unique, never null). Also the keyset cursor anchor. Sources: all five."
+            "Stable, opaque id for one recalled product line (unique, never null). Also the "
+            "pagination cursor anchor. Sources: all five."
         )
     )
     recall_event_id: str = Field(
         description=(
-            "Surrogate key of the parent recall event (md5; joins to GET "
-            "/recalls/{source}/{recall_id}). Many products can share one event for CPSC/FDA/NHTSA; "
-            "1:1 for USDA/USCG. Sources: all five."
+            "Id of the parent recall event (links to `GET /recalls/{source}/{recall_id}`). Several "
+            "products can share one recall for CPSC, FDA, and NHTSA; one-to-one for USDA and USCG. "
+            "Sources: all five."
         )
     )
     source: Source = Field(
-        description="Originating data source: CPSC, FDA, USDA, NHTSA, USCG. Always populated."
+        description="The issuing agency: CPSC, FDA, USDA, NHTSA, or USCG. Always present."
     )
     source_recall_id: str = Field(
         description=(
-            "Source-native recall identifier, paired with source for the public natural key. "
-            "Recall-grain for CPSC/USDA/NHTSA/USCG; for FDA it is the product id (product-grain) — "
-            "the FDA recall-event id is recall_event_id. Always populated."
+            "Each agency's own recall identifier, paired with `source` for the public key. For "
+            "CPSC, USDA, NHTSA, and USCG it is recall-level; for FDA it is the product id, and the "
+            "FDA recall id is in `recall_event_id`. Always present."
         )
     )
     product_name: str | None = Field(
         default=None,
         description=(
-            "Product name for this recalled product. Source-dependent: CPSC = product name; USCG = "
-            "boat model name; FDA = the product DESCRIPTION text; USDA = the recall TITLE; NHTSA = "
-            "the COMPONENT description. May be null for some rows. Sources: all five."
+            "The product's name. Varies by agency: CPSC product name, USCG boat model name, FDA "
+            "product description, USDA recall title, NHTSA component description. May be null for "
+            "some rows. Sources: all five."
         ),
     )
     product_description: str | None = Field(
         default=None,
         description=(
-            "Free-text description of the product. Source-dependent: FDA = the product description "
-            "(same value as product_name); USDA = the product-items blob (~40% null); NHTSA = the "
-            "component description; USCG = a short defect/problem note (~25 chars). Sources: FDA, "
-            "USDA, NHTSA, USCG (null for CPSC, whose per-product description is absent at source)."
+            "A free-text description of the product. Varies by agency: FDA repeats the product "
+            "name, USDA gives a product-items blob (about 40% null), NHTSA the component "
+            "description, USCG a short defect note (about 25 characters). Sources: FDA, USDA, "
+            "NHTSA, USCG (null for CPSC, which has none)."
         ),
     )
     model: str | None = Field(
         default=None,
         description=(
-            "Product model identifier for exact-match lookup (btree-indexed). Populated only for "
-            "NHTSA (MODELTXT, e.g. 'F-150'); null for CPSC, FDA, USDA, USCG (USCG's boat name is "
-            "in product_name). Sources: NHTSA only."
+            "Product model identifier, used by the `model` exact-match lookup. Populated only for "
+            "NHTSA (e.g. 'F-150'); null for the others (USCG's boat name is in `product_name`). "
+            "Sources: NHTSA only."
         ),
     )
     type: str | None = Field(
         default=None,
         examples=["Frozen ready-to-eat"],
         description=(
-            "Source-specific product category code/label (NOT harmonized across sources): FDA = "
-            "commodity (Devices/Food/Drugs/Veterinary/Biologics/Cosmetics); USDA = FSIS processing "
-            "category; NHTSA = recall-type code (V/T/E/C/I/X); USCG = a numeric boat-type code; "
-            "CPSC = a free-text product type. Compare only within a single source; null where the "
-            "source provides no type. Sources: all five."
+            "Each agency's own product category code or label (not standardized across agencies): "
+            "FDA commodity (Devices, Food, Drugs, Veterinary, Biologics, Cosmetics); USDA "
+            "processing category; NHTSA recall-type code (V/T/E/C/I/X); USCG a numeric boat-type "
+            "code; CPSC a free-text product type. Compare only within one agency; null where the "
+            "agency provides no type. Sources: all five."
         ),
     )
     model_year: str | int | None = Field(
         default=None,
         examples=[2019],
         description=(
-            "Model year of the recalled item (text). Populated only for NHTSA (YEARTXT, with the "
-            "'9999' sentinel nulled) and USCG (varied formats; ~32% null); null for CPSC, FDA, "
-            "USDA. Kept as text because USCG values are not uniformly numeric. Sources: NHTSA, "
-            "USCG."
+            "Model year of the recalled item, as text. Populated only for NHTSA and USCG (varied "
+            "formats, about 32% null for USCG); null for CPSC, FDA, and USDA. Kept as text because "
+            "USCG values are not always numeric. Sources: NHTSA, USCG."
         ),
     )
     hin: str | None = Field(
         default=None,
         description=(
-            "USCG Hull Identification Number for the recalled boat (the boating analog of a "
-            "VIN/UPC; btree-indexed). USCG-only — null for CPSC, FDA, USDA, NHTSA; only ~54% of "
-            "USCG products carry a real HIN. Sources: USCG only."
+            "USCG Hull Identification Number for the recalled boat (the boating equivalent of a "
+            "VIN). USCG only; only about 54% of USCG products carry a real HIN. Sources: USCG only."
         ),
     )
     recall_title: str | None = Field(
         default=None,
         description=(
-            "Headline of the recall this product belongs to. Native title for CPSC/USDA; "
-            "synthesized '<recall-id> — <firm/model>' for FDA/NHTSA/USCG. Always populated. "
-            "Sources: all five."
+            "Headline of the recall this product belongs to. CPSC and USDA provide one directly; "
+            "for FDA, NHTSA, and USCG it is built from the recall id and firm or model name. "
+            "Always present. Sources: all five."
         ),
     )
     classification: str | None = Field(default=None, description=D_CLASSIFICATION)
     risk_level: str | None = Field(
         default=None,
         description=(
-            "USDA health-risk label derived 1:1 from the USDA classification (e.g. 'High - Class "
-            "I'). Sources: USDA only (null for CPSC/FDA/NHTSA/USCG)."
+            "USDA's health-risk label, mapping directly to its classification (e.g. 'High - Class "
+            "I'). Sources: USDA only (null for the others)."
         ),
     )
     published_at: datetime = Field(
         description=(
-            "Publication / last-published timestamp of the recall (always present; the canonical "
-            "sort key). Sources: all five."
+            "When the recall was last published or updated. Always present, and the default sort "
+            "key. Sources: all five."
         )
     )
     url: str | None = Field(
@@ -132,42 +130,41 @@ class ProductSearchHit(BaseModel):
     is_active: bool | None = Field(
         default=None,
         description=(
-            "Conformed tri-state flag for whether the recall is still active (from the "
-            "FDA/USDA/USCG lifecycle). Sources: FDA, USDA, USCG (null for CPSC/NHTSA)."
+            "Whether the recall is still active (from the FDA, USDA, or USCG status). Null for "
+            "CPSC and NHTSA. Sources: FDA, USDA, USCG."
         ),
     )
     firm_name: str | None = Field(
         default=None,
         description=(
-            "Primary display firm for the recall — the canonical name of the highest-priority firm "
-            "by role (manufacturer > establishment > filer > importer > distributor). May be null "
-            "when no firm resolves. Sources: all five."
+            "The recall's main firm, chosen by role priority (manufacturer, then establishment, "
+            "filer, importer, distributor). May be null when no firm is matched. Sources: all "
+            "five."
         ),
     )
     recall_product_upcs: list[str] = Field(
         default_factory=list,
         description=(
-            "Recall-level UPC codes (recall-event grain, denormalized onto each product row; this "
-            "is what UPC search matches via containment). Gold stores them as [{upc:…}] objects; "
-            "the API flattens to bare strings ([] when absent). Populated only for CPSC and sparse "
-            "there (~5% of CPSC recalls); empty for FDA/USDA/NHTSA/USCG. Sources: CPSC only."
+            "Recall-level UPC codes (shared across the whole recall and repeated on each product "
+            "row; this is what UPC search matches). Empty list when absent. Populated only for "
+            "CPSC and sparse there (about 5% of CPSC recalls); empty for the others. Sources: CPSC "
+            "only."
         ),
     )
     rank: float | None = Field(
         default=None,
         description=(
-            "Cover-density full-text relevance (ts_rank_cd over the product search_vector). "
-            "Present only on the keyword (q) path; null for hin/model/upc lookups. Higher is more "
-            "relevant, but scores are not comparable across queries. Computed per request, not "
-            "stored. Source-independent."
+            "Search relevance score (higher is more relevant). Present only on the keyword (`q`) "
+            "path; null for `hin`, `model`, and `upc` lookups. Scores are not comparable between "
+            "queries. Computed per request. Applies to all sources."
         ),
     )
     upc_is_recall_level: Literal[True] = Field(
         default=True,
         description=(
-            "Constant True honesty flag: UPC search is recall-level (containment over "
-            "recall_product_upcs, currently CPSC-sourced and sparse), not product-grain. The "
-            "per-product upc column is null for every source. Always True; source-independent."
+            "Always true. A reminder that UPC search matches at the recall level (currently "
+            "CPSC-sourced and sparse), not at the individual-product level. Applies to all "
+            "sources."
         ),
     )
 
