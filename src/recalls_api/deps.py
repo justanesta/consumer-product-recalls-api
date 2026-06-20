@@ -76,7 +76,9 @@ def pagination_params(
     cursor: Annotated[
         str | None, Query(description="Opaque cursor from a prior next_cursor.")
     ] = None,
-    with_total: Annotated[bool, Query(description="Also compute total (extra COUNT).")] = False,
+    with_total: Annotated[
+        bool, Query(description="Also return the total count (an extra query).")
+    ] = False,
 ) -> PaginationParams:
     return PaginationParams(
         limit=min(limit, settings.page_limit_max),
@@ -110,55 +112,63 @@ class RecallFilters:
 def recall_filters(
     source: Annotated[
         SourceList,
-        Query(description="Issuing agency; repeat or comma-separate for any-of (OR)."),
+        Query(description="Issuing agency; repeat or comma-separate to match any of several."),
     ] = None,
     classification: Annotated[
         _ClassificationList,
         Query(
-            description="EXACT source-native classification(s); repeat/comma-separate for any-of."
+            description="Exact match on a source's own classification value; "
+            "repeat/comma-separate to match any of several."
         ),
     ] = None,
     is_active: Annotated[
         bool | None,
-        Query(description="Tri-state; CPSC/NHTSA carry null and match neither true nor false."),
+        Query(
+            description="CPSC and NHTSA have no open/closed status, so they're null and match "
+            "neither true nor false."
+        ),
     ] = None,
     published_after: Annotated[
-        date | None, Query(description="Inclusive from the START of that calendar day.")
+        date | None, Query(description="Inclusive, from the start of that day (UTC).")
     ] = None,
     published_before: Annotated[
-        date | None, Query(description="Inclusive of the ENTIRE published_before calendar day.")
+        date | None, Query(description="Inclusive, through the end of that day (UTC).")
     ] = None,
     firm: Annotated[
         str | None,
         Query(
             min_length=2,
             max_length=200,
-            description="Case-insensitive substring on the recall's PRIMARY firm name only (not "
-            "secondary/co-recalled firms); unindexed.",
+            description="Case-insensitive substring match on the recall's primary firm name only "
+            "(not co-recalled firms). Slower than the indexed filters.",
         ),
     ] = None,
     distribution_scope: Annotated[
         _ScopeList,
         Query(
-            description="Gold distribution scope(s); repeat/comma-separate for any-of (422 on a "
-            "bad value)."
+            description="Distribution scope(s) — Nationwide, Regional, International, or "
+            "Unspecified; repeat/comma-separate to match any of several."
         ),
     ] = None,
     lifecycle_status: Annotated[
         _LifecycleList,
         Query(
-            description="EXACT source-native status(es); repeat/comma-separate for any-of. "
-            "Null for CPSC/NHTSA (excludes those rows).",
+            description="Exact match on a source's own status value; repeat/comma-separate to "
+            "match any of several. CPSC and NHTSA have none, so filtering excludes them.",
         ),
     ] = None,
     announced_after: Annotated[
         date | None,
-        Query(description="announced_at >= start of that day (UTC); null-announced rows excluded."),
+        Query(
+            description="From the start of that day (UTC), by announcement date; recalls without "
+            "one are excluded."
+        ),
     ] = None,
     announced_before: Annotated[
         date | None,
         Query(
-            description="Inclusive of the whole announced_before day; nulls excluded.",
+            description="Through the end of that day (UTC), by announcement date; recalls without "
+            "one are excluded.",
         ),
     ] = None,
     source_recall_id: Annotated[
@@ -166,30 +176,30 @@ def recall_filters(
         Query(
             min_length=1,
             max_length=128,
-            description="EXACT agency-native id; unique only when combined with source.",
+            description="Exact agency recall id; unique only together with `source`.",
         ),
     ] = None,
     firm_id: Annotated[
         str | None,
         Query(
             pattern=r"^[0-9a-f]{32}$",
-            description="Canonical firm cluster id; returns recalls where this firm appears in ANY "
-            "role (incl. co-recalled/secondary firms), unlike `firm` (primary-name substring). "
-            "Obtain from RecallDetail.firms[].firm_id.",
+            description="A firm's id; returns every recall where this firm appears in any role "
+            "(including co-recalled firms) — unlike `firm`, which is a primary-name substring. "
+            "Get it from a recall's `firms[].firm_id`.",
         ),
     ] = None,
     distribution_state: Annotated[
         _CodeList,
         Query(
-            description="USPS 2-letter code(s); recalls distributed to ANY (FDA/USDA only). "
-            "Repeat/comma-separate for any-of.",
+            description="US state code(s); recalls distributed to any of them (FDA and USDA only). "
+            "Repeat/comma-separate to match any of several.",
         ),
     ] = None,
     distribution_country: Annotated[
         _CodeList,
         Query(
-            description="ISO alpha-2 code(s); FOREIGN distribution only ('US' excluded by design). "
-            "Repeat/comma-separate for any-of.",
+            description="2-letter country code(s); foreign distribution only (US is excluded by "
+            "design). Repeat/comma-separate to match any of several.",
         ),
     ] = None,
 ) -> RecallFilters:

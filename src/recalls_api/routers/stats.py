@@ -38,8 +38,8 @@ router = APIRouter(prefix="/stats", tags=["stats"])
 _SourceParam = Annotated[
     StatsSource | None,
     Query(
-        description="Filter to one feed (incl. the 'ALL' rollup where the fact carries it). Omit "
-        "for every row. A source absent from a fact returns []."
+        description="Filter to one agency, or `ALL` for the all-agency rollup where available. "
+        "Omit to get every row; an agency with no data for this stat returns an empty list."
     ),
 ]
 
@@ -70,6 +70,12 @@ async def overview(conn: Annotated[AsyncConnection, Depends(deps.get_conn)]) -> 
     response_model=list[PeriodCount],
     responses=LIST_ERRORS,
     summary="Recall counts per period (month/week/year) per source + 'ALL' rollup.",
+    description=(
+        "Recall counts per period (month, week, or year) for each agency, plus an `ALL` rollup. "
+        "Periods are dated by when each recall was first announced, falling back to its publish "
+        "date when no announcement date is on record — so counts can differ from a publish-date "
+        "view."
+    ),
 )
 async def recalls_by_period(
     conn: Annotated[AsyncConnection, Depends(deps.get_conn)],
@@ -84,6 +90,11 @@ async def recalls_by_period(
     response_model=list[MonthlyTrendPoint],
     responses=LIST_ERRORS,
     summary="Per-source monthly trend with rolling averages + year-over-year change.",
+    description=(
+        "Per-agency monthly counts with rolling averages and year-over-year change. Months are "
+        "dated by when each recall was first announced (or its publish date when none is on "
+        "record)."
+    ),
 )
 async def monthly_trend(
     conn: Annotated[AsyncConnection, Depends(deps.get_conn)],
@@ -165,7 +176,12 @@ async def by_country(
     "/units",
     response_model=list[UnitsRow],
     responses=LIST_ERRORS,
-    summary="Units recalled per source x unit_category x month (NOT cross-source comparable).",
+    summary="Units recalled per agency and unit type, by month (not comparable across agencies).",
+    description=(
+        "Units recalled per agency and unit type, by month. Units come in incomparable kinds "
+        "(counts, weight, volume), so never add them across kinds or agencies. Months are dated by "
+        "when each recall was first announced (or its publish date when none is on record)."
+    ),
 )
 async def units(
     conn: Annotated[AsyncConnection, Depends(deps.get_conn)],

@@ -29,13 +29,15 @@ from recalls_api.routers import firms, health, products, recalls, stats
 from recalls_api.settings import get_settings
 
 _DESCRIPTION = (
-    "Open, read-only API over the consumer product recalls gold marts (CPSC, FDA, USDA, NHTSA, "
-    "USCG). Honest caveats: `is_active` is tri-state (CPSC/NHTSA carry no status -> null); "
-    "`classification` is source-native and not comparable across sources; UPC search matches "
-    "recall-level UPC arrays, not per-product UPC; there is no fuzzy/typo search."
+    "Open, read-only API for US consumer product recalls from five agencies (CPSC, FDA, USDA, "
+    "NHTSA, USCG). No key, GET-only, cursor-paginated. A few things worth knowing up front: a "
+    "recall's `is_active` flag is `null` (not false) for CPSC and NHTSA, which don't track an "
+    "open/closed status; `classification` uses each agency's own severity scale and can't be "
+    "compared across agencies; UPC search matches a whole recall, not an individual product; and "
+    "search is exact — a typo finds nothing."
     "\n\n**Common lookups:** by product name → `GET /products/search?q=`; by **UPC barcode** → "
-    "`GET /products/search?upc=`; vehicle/boat by identifier → `GET /products/search?model=` / "
-    "`?hin=`; one recall → `GET /recalls/{source}/{recall_id}`."
+    "`GET /products/search?upc=`; vehicle or boat by identifier → `GET /products/search?model=` / "
+    "`?hin=`; a single recall → `GET /recalls/{source}/{recall_id}`."
 )
 
 

@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Consumer Product Recalls API",
-    "description": "Open, read-only API over the consumer product recalls gold marts (CPSC, FDA, USDA, NHTSA, USCG). Honest caveats: `is_active` is tri-state (CPSC/NHTSA carry no status -> null); `classification` is source-native and not comparable across sources; UPC search matches recall-level UPC arrays, not per-product UPC; there is no fuzzy/typo search.\n\n**Common lookups:** by product name → `GET /products/search?q=`; by **UPC barcode** → `GET /products/search?upc=`; vehicle/boat by identifier → `GET /products/search?model=` / `?hin=`; one recall → `GET /recalls/{source}/{recall_id}`.",
+    "description": "Open, read-only API for US consumer product recalls from five agencies (CPSC, FDA, USDA, NHTSA, USCG). No key, GET-only, cursor-paginated. A few things worth knowing up front: a recall's `is_active` flag is `null` (not false) for CPSC and NHTSA, which don't track an open/closed status; `classification` uses each agency's own severity scale and can't be compared across agencies; UPC search matches a whole recall, not an individual product; and search is exact — a typo finds nothing.\n\n**Common lookups:** by product name → `GET /products/search?q=`; by **UPC barcode** → `GET /products/search?upc=`; vehicle or boat by identifier → `GET /products/search?model=` / `?hin=`; a single recall → `GET /recalls/{source}/{recall_id}`.",
     "version": "0.1.1"
   },
   "paths": {
@@ -65,8 +65,8 @@
         "tags": [
           "recalls"
         ],
-        "summary": "List recalls (newest first), with filters and keyset pagination.",
-        "description": "Recalls across CPSC, FDA, USDA, NHTSA, USCG, newest first (`published_at DESC`), keyset (seek) paginated — pass the previous page's `next_cursor` back as `cursor`. Filters AND together: `source`, `classification`, `is_active`, `lifecycle_status`, `distribution_scope`, `distribution_state`, `distribution_country`, `source_recall_id`, `firm`, plus the `published_*` and `announced_*` date ranges. The categorical filters (`source`, `classification`, `lifecycle_status`, `distribution_scope`, `distribution_state`, `distribution_country`) accept multiple values — repeat the param or comma-separate (`?source=CPSC,FDA`) for any-of (OR) within a field; different fields still AND. Caveats: `classification`/`lifecycle_status` are source-native (not unified); `is_active`/`lifecycle_status` are null for CPSC/NHTSA (a value filter excludes those rows); `announced_at` is nullable (an `announced_*` filter drops rows lacking it); `distribution_state`/`distribution_country` are FDA/USDA-only and `distribution_country` is foreign-only (`US` excluded by design); `source_recall_id` is exact, unique only with `source` (use the detail route); `firm` is an unindexed substring filter. Total is omitted unless `with_total=true`.",
+        "summary": "List recalls, newest first, with filters and pagination.",
+        "description": "Recalls across all five agencies, newest first (by when each was most recently published or updated), with cursor pagination — pass a page's `next_cursor` back as `cursor` for the next page. Filters combine with AND across fields; the categorical ones (`source`, `classification`, `lifecycle_status`, `distribution_scope`, `distribution_state`, `distribution_country`) accept multiple values — repeat the param or comma-separate them (`?source=CPSC,FDA`) to match any of them within that field. Each filter notes its own caveats below. The total count is omitted unless you pass `with_total=true`.",
         "operationId": "list_recalls_recalls_get",
         "parameters": [
           {
@@ -85,10 +85,10 @@
                   "type": "null"
                 }
               ],
-              "description": "Issuing agency; repeat or comma-separate for any-of (OR).",
+              "description": "Issuing agency; repeat or comma-separate to match any of several.",
               "title": "Source"
             },
-            "description": "Issuing agency; repeat or comma-separate for any-of (OR)."
+            "description": "Issuing agency; repeat or comma-separate to match any of several."
           },
           {
             "name": "classification",
@@ -107,10 +107,10 @@
                   "type": "null"
                 }
               ],
-              "description": "EXACT source-native classification(s); repeat/comma-separate for any-of.",
+              "description": "Exact match on a source's own classification value; repeat/comma-separate to match any of several.",
               "title": "Classification"
             },
-            "description": "EXACT source-native classification(s); repeat/comma-separate for any-of."
+            "description": "Exact match on a source's own classification value; repeat/comma-separate to match any of several."
           },
           {
             "name": "is_active",
@@ -125,10 +125,10 @@
                   "type": "null"
                 }
               ],
-              "description": "Tri-state; CPSC/NHTSA carry null and match neither true nor false.",
+              "description": "CPSC and NHTSA have no open/closed status, so they're null and match neither true nor false.",
               "title": "Is Active"
             },
-            "description": "Tri-state; CPSC/NHTSA carry null and match neither true nor false."
+            "description": "CPSC and NHTSA have no open/closed status, so they're null and match neither true nor false."
           },
           {
             "name": "published_after",
@@ -144,10 +144,10 @@
                   "type": "null"
                 }
               ],
-              "description": "Inclusive from the START of that calendar day.",
+              "description": "Inclusive, from the start of that day (UTC).",
               "title": "Published After"
             },
-            "description": "Inclusive from the START of that calendar day."
+            "description": "Inclusive, from the start of that day (UTC)."
           },
           {
             "name": "published_before",
@@ -163,10 +163,10 @@
                   "type": "null"
                 }
               ],
-              "description": "Inclusive of the ENTIRE published_before calendar day.",
+              "description": "Inclusive, through the end of that day (UTC).",
               "title": "Published Before"
             },
-            "description": "Inclusive of the ENTIRE published_before calendar day."
+            "description": "Inclusive, through the end of that day (UTC)."
           },
           {
             "name": "firm",
@@ -183,10 +183,10 @@
                   "type": "null"
                 }
               ],
-              "description": "Case-insensitive substring on the recall's PRIMARY firm name only (not secondary/co-recalled firms); unindexed.",
+              "description": "Case-insensitive substring match on the recall's primary firm name only (not co-recalled firms). Slower than the indexed filters.",
               "title": "Firm"
             },
-            "description": "Case-insensitive substring on the recall's PRIMARY firm name only (not secondary/co-recalled firms); unindexed."
+            "description": "Case-insensitive substring match on the recall's primary firm name only (not co-recalled firms). Slower than the indexed filters."
           },
           {
             "name": "distribution_scope",
@@ -204,10 +204,10 @@
                   "type": "null"
                 }
               ],
-              "description": "Gold distribution scope(s); repeat/comma-separate for any-of (422 on a bad value).",
+              "description": "Distribution scope(s) — Nationwide, Regional, International, or Unspecified; repeat/comma-separate to match any of several.",
               "title": "Distribution Scope"
             },
-            "description": "Gold distribution scope(s); repeat/comma-separate for any-of (422 on a bad value)."
+            "description": "Distribution scope(s) — Nationwide, Regional, International, or Unspecified; repeat/comma-separate to match any of several."
           },
           {
             "name": "lifecycle_status",
@@ -226,10 +226,10 @@
                   "type": "null"
                 }
               ],
-              "description": "EXACT source-native status(es); repeat/comma-separate for any-of. Null for CPSC/NHTSA (excludes those rows).",
+              "description": "Exact match on a source's own status value; repeat/comma-separate to match any of several. CPSC and NHTSA have none, so filtering excludes them.",
               "title": "Lifecycle Status"
             },
-            "description": "EXACT source-native status(es); repeat/comma-separate for any-of. Null for CPSC/NHTSA (excludes those rows)."
+            "description": "Exact match on a source's own status value; repeat/comma-separate to match any of several. CPSC and NHTSA have none, so filtering excludes them."
           },
           {
             "name": "announced_after",
@@ -245,10 +245,10 @@
                   "type": "null"
                 }
               ],
-              "description": "announced_at >= start of that day (UTC); null-announced rows excluded.",
+              "description": "From the start of that day (UTC), by announcement date; recalls without one are excluded.",
               "title": "Announced After"
             },
-            "description": "announced_at >= start of that day (UTC); null-announced rows excluded."
+            "description": "From the start of that day (UTC), by announcement date; recalls without one are excluded."
           },
           {
             "name": "announced_before",
@@ -264,10 +264,10 @@
                   "type": "null"
                 }
               ],
-              "description": "Inclusive of the whole announced_before day; nulls excluded.",
+              "description": "Through the end of that day (UTC), by announcement date; recalls without one are excluded.",
               "title": "Announced Before"
             },
-            "description": "Inclusive of the whole announced_before day; nulls excluded."
+            "description": "Through the end of that day (UTC), by announcement date; recalls without one are excluded."
           },
           {
             "name": "source_recall_id",
@@ -284,10 +284,10 @@
                   "type": "null"
                 }
               ],
-              "description": "EXACT agency-native id; unique only when combined with source.",
+              "description": "Exact agency recall id; unique only together with `source`.",
               "title": "Source Recall Id"
             },
-            "description": "EXACT agency-native id; unique only when combined with source."
+            "description": "Exact agency recall id; unique only together with `source`."
           },
           {
             "name": "firm_id",
@@ -303,10 +303,10 @@
                   "type": "null"
                 }
               ],
-              "description": "Canonical firm cluster id; returns recalls where this firm appears in ANY role (incl. co-recalled/secondary firms), unlike `firm` (primary-name substring). Obtain from RecallDetail.firms[].firm_id.",
+              "description": "A firm's id; returns every recall where this firm appears in any role (including co-recalled firms) — unlike `firm`, which is a primary-name substring. Get it from a recall's `firms[].firm_id`.",
               "title": "Firm Id"
             },
-            "description": "Canonical firm cluster id; returns recalls where this firm appears in ANY role (incl. co-recalled/secondary firms), unlike `firm` (primary-name substring). Obtain from RecallDetail.firms[].firm_id."
+            "description": "A firm's id; returns every recall where this firm appears in any role (including co-recalled firms) — unlike `firm`, which is a primary-name substring. Get it from a recall's `firms[].firm_id`."
           },
           {
             "name": "distribution_state",
@@ -326,10 +326,10 @@
                   "type": "null"
                 }
               ],
-              "description": "USPS 2-letter code(s); recalls distributed to ANY (FDA/USDA only). Repeat/comma-separate for any-of.",
+              "description": "US state code(s); recalls distributed to any of them (FDA and USDA only). Repeat/comma-separate to match any of several.",
               "title": "Distribution State"
             },
-            "description": "USPS 2-letter code(s); recalls distributed to ANY (FDA/USDA only). Repeat/comma-separate for any-of."
+            "description": "US state code(s); recalls distributed to any of them (FDA and USDA only). Repeat/comma-separate to match any of several."
           },
           {
             "name": "distribution_country",
@@ -349,10 +349,10 @@
                   "type": "null"
                 }
               ],
-              "description": "ISO alpha-2 code(s); FOREIGN distribution only ('US' excluded by design). Repeat/comma-separate for any-of.",
+              "description": "2-letter country code(s); foreign distribution only (US is excluded by design). Repeat/comma-separate to match any of several.",
               "title": "Distribution Country"
             },
-            "description": "ISO alpha-2 code(s); FOREIGN distribution only ('US' excluded by design). Repeat/comma-separate for any-of."
+            "description": "2-letter country code(s); foreign distribution only (US is excluded by design). Repeat/comma-separate to match any of several."
           },
           {
             "name": "limit",
@@ -392,11 +392,11 @@
             "required": false,
             "schema": {
               "type": "boolean",
-              "description": "Also compute total (extra COUNT).",
+              "description": "Also return the total count (an extra query).",
               "default": false,
               "title": "With Total"
             },
-            "description": "Also compute total (extra COUNT)."
+            "description": "Also return the total count (an extra query)."
           }
         ],
         "responses": {
@@ -458,8 +458,8 @@
         "tags": [
           "recalls"
         ],
-        "summary": "Search recalls by keyword (recall-grain full-text), with the same filters.",
-        "description": "Recall-grain keyword search — Postgres full-text over the recall's title, product names, firm, and narrative (reason/consequence), ranked by relevance (`rank` = `ts_rank_cd`). Token/prefix matching only; NO fuzzy/typo search. Unlike `/products/search` (product grain — identifiers and UPC lookup via `?upc=`), this returns one row per recall, each linking to its detail route. All `/recalls` filters AND-in. Relevance-ordered keyset is not index-backed (the GIN serves the `@@` match, not the sort); the sort is over the matched set.",
+        "summary": "Search recalls by keyword, with the same filters.",
+        "description": "Keyword search over recalls — full-text across each recall's title, product names, firm, and narrative, ranked by relevance (`rank`). Matches whole words and prefixes only; no fuzzy or typo search. Unlike `/products/search` (which is product-level and also does identifier and UPC lookups via `?upc=`), this returns one row per recall, each linking to its detail route. All `/recalls` filters apply here too.",
         "operationId": "search_recalls_recalls_search_get",
         "parameters": [
           {
@@ -491,10 +491,10 @@
                   "type": "null"
                 }
               ],
-              "description": "Issuing agency; repeat or comma-separate for any-of (OR).",
+              "description": "Issuing agency; repeat or comma-separate to match any of several.",
               "title": "Source"
             },
-            "description": "Issuing agency; repeat or comma-separate for any-of (OR)."
+            "description": "Issuing agency; repeat or comma-separate to match any of several."
           },
           {
             "name": "classification",
@@ -513,10 +513,10 @@
                   "type": "null"
                 }
               ],
-              "description": "EXACT source-native classification(s); repeat/comma-separate for any-of.",
+              "description": "Exact match on a source's own classification value; repeat/comma-separate to match any of several.",
               "title": "Classification"
             },
-            "description": "EXACT source-native classification(s); repeat/comma-separate for any-of."
+            "description": "Exact match on a source's own classification value; repeat/comma-separate to match any of several."
           },
           {
             "name": "is_active",
@@ -531,10 +531,10 @@
                   "type": "null"
                 }
               ],
-              "description": "Tri-state; CPSC/NHTSA carry null and match neither true nor false.",
+              "description": "CPSC and NHTSA have no open/closed status, so they're null and match neither true nor false.",
               "title": "Is Active"
             },
-            "description": "Tri-state; CPSC/NHTSA carry null and match neither true nor false."
+            "description": "CPSC and NHTSA have no open/closed status, so they're null and match neither true nor false."
           },
           {
             "name": "published_after",
@@ -550,10 +550,10 @@
                   "type": "null"
                 }
               ],
-              "description": "Inclusive from the START of that calendar day.",
+              "description": "Inclusive, from the start of that day (UTC).",
               "title": "Published After"
             },
-            "description": "Inclusive from the START of that calendar day."
+            "description": "Inclusive, from the start of that day (UTC)."
           },
           {
             "name": "published_before",
@@ -569,10 +569,10 @@
                   "type": "null"
                 }
               ],
-              "description": "Inclusive of the ENTIRE published_before calendar day.",
+              "description": "Inclusive, through the end of that day (UTC).",
               "title": "Published Before"
             },
-            "description": "Inclusive of the ENTIRE published_before calendar day."
+            "description": "Inclusive, through the end of that day (UTC)."
           },
           {
             "name": "firm",
@@ -589,10 +589,10 @@
                   "type": "null"
                 }
               ],
-              "description": "Case-insensitive substring on the recall's PRIMARY firm name only (not secondary/co-recalled firms); unindexed.",
+              "description": "Case-insensitive substring match on the recall's primary firm name only (not co-recalled firms). Slower than the indexed filters.",
               "title": "Firm"
             },
-            "description": "Case-insensitive substring on the recall's PRIMARY firm name only (not secondary/co-recalled firms); unindexed."
+            "description": "Case-insensitive substring match on the recall's primary firm name only (not co-recalled firms). Slower than the indexed filters."
           },
           {
             "name": "distribution_scope",
@@ -610,10 +610,10 @@
                   "type": "null"
                 }
               ],
-              "description": "Gold distribution scope(s); repeat/comma-separate for any-of (422 on a bad value).",
+              "description": "Distribution scope(s) — Nationwide, Regional, International, or Unspecified; repeat/comma-separate to match any of several.",
               "title": "Distribution Scope"
             },
-            "description": "Gold distribution scope(s); repeat/comma-separate for any-of (422 on a bad value)."
+            "description": "Distribution scope(s) — Nationwide, Regional, International, or Unspecified; repeat/comma-separate to match any of several."
           },
           {
             "name": "lifecycle_status",
@@ -632,10 +632,10 @@
                   "type": "null"
                 }
               ],
-              "description": "EXACT source-native status(es); repeat/comma-separate for any-of. Null for CPSC/NHTSA (excludes those rows).",
+              "description": "Exact match on a source's own status value; repeat/comma-separate to match any of several. CPSC and NHTSA have none, so filtering excludes them.",
               "title": "Lifecycle Status"
             },
-            "description": "EXACT source-native status(es); repeat/comma-separate for any-of. Null for CPSC/NHTSA (excludes those rows)."
+            "description": "Exact match on a source's own status value; repeat/comma-separate to match any of several. CPSC and NHTSA have none, so filtering excludes them."
           },
           {
             "name": "announced_after",
@@ -651,10 +651,10 @@
                   "type": "null"
                 }
               ],
-              "description": "announced_at >= start of that day (UTC); null-announced rows excluded.",
+              "description": "From the start of that day (UTC), by announcement date; recalls without one are excluded.",
               "title": "Announced After"
             },
-            "description": "announced_at >= start of that day (UTC); null-announced rows excluded."
+            "description": "From the start of that day (UTC), by announcement date; recalls without one are excluded."
           },
           {
             "name": "announced_before",
@@ -670,10 +670,10 @@
                   "type": "null"
                 }
               ],
-              "description": "Inclusive of the whole announced_before day; nulls excluded.",
+              "description": "Through the end of that day (UTC), by announcement date; recalls without one are excluded.",
               "title": "Announced Before"
             },
-            "description": "Inclusive of the whole announced_before day; nulls excluded."
+            "description": "Through the end of that day (UTC), by announcement date; recalls without one are excluded."
           },
           {
             "name": "source_recall_id",
@@ -690,10 +690,10 @@
                   "type": "null"
                 }
               ],
-              "description": "EXACT agency-native id; unique only when combined with source.",
+              "description": "Exact agency recall id; unique only together with `source`.",
               "title": "Source Recall Id"
             },
-            "description": "EXACT agency-native id; unique only when combined with source."
+            "description": "Exact agency recall id; unique only together with `source`."
           },
           {
             "name": "firm_id",
@@ -709,10 +709,10 @@
                   "type": "null"
                 }
               ],
-              "description": "Canonical firm cluster id; returns recalls where this firm appears in ANY role (incl. co-recalled/secondary firms), unlike `firm` (primary-name substring). Obtain from RecallDetail.firms[].firm_id.",
+              "description": "A firm's id; returns every recall where this firm appears in any role (including co-recalled firms) — unlike `firm`, which is a primary-name substring. Get it from a recall's `firms[].firm_id`.",
               "title": "Firm Id"
             },
-            "description": "Canonical firm cluster id; returns recalls where this firm appears in ANY role (incl. co-recalled/secondary firms), unlike `firm` (primary-name substring). Obtain from RecallDetail.firms[].firm_id."
+            "description": "A firm's id; returns every recall where this firm appears in any role (including co-recalled firms) — unlike `firm`, which is a primary-name substring. Get it from a recall's `firms[].firm_id`."
           },
           {
             "name": "distribution_state",
@@ -732,10 +732,10 @@
                   "type": "null"
                 }
               ],
-              "description": "USPS 2-letter code(s); recalls distributed to ANY (FDA/USDA only). Repeat/comma-separate for any-of.",
+              "description": "US state code(s); recalls distributed to any of them (FDA and USDA only). Repeat/comma-separate to match any of several.",
               "title": "Distribution State"
             },
-            "description": "USPS 2-letter code(s); recalls distributed to ANY (FDA/USDA only). Repeat/comma-separate for any-of."
+            "description": "US state code(s); recalls distributed to any of them (FDA and USDA only). Repeat/comma-separate to match any of several."
           },
           {
             "name": "distribution_country",
@@ -755,10 +755,10 @@
                   "type": "null"
                 }
               ],
-              "description": "ISO alpha-2 code(s); FOREIGN distribution only ('US' excluded by design). Repeat/comma-separate for any-of.",
+              "description": "2-letter country code(s); foreign distribution only (US is excluded by design). Repeat/comma-separate to match any of several.",
               "title": "Distribution Country"
             },
-            "description": "ISO alpha-2 code(s); FOREIGN distribution only ('US' excluded by design). Repeat/comma-separate for any-of."
+            "description": "2-letter country code(s); foreign distribution only (US is excluded by design). Repeat/comma-separate to match any of several."
           },
           {
             "name": "limit",
@@ -798,11 +798,11 @@
             "required": false,
             "schema": {
               "type": "boolean",
-              "description": "Also compute total (extra COUNT).",
+              "description": "Also return the total count (an extra query).",
               "default": false,
               "title": "With Total"
             },
-            "description": "Also compute total (extra COUNT)."
+            "description": "Also return the total count (an extra query)."
           }
         ],
         "responses": {
@@ -864,8 +864,8 @@
         "tags": [
           "recalls"
         ],
-        "summary": "Fetch one recall's full record by its source + native recall id.",
-        "description": "The complete record for one recall, by issuing agency + that agency's native id (e.g. `CPSC/24-001`). The source is accepted case-insensitively. Field caveats: `classification`/`risk_level`/`lifecycle_status` are source-native; `is_active` is `null` for CPSC/NHTSA; `distribution_states` is agency prose (a scalar string), distinct from the parsed `distribution_state_codes`.",
+        "summary": "Fetch one recall's full record by agency and recall id.",
+        "description": "The full record for one recall, identified by its issuing agency and that agency's own recall id (e.g. `CPSC/24-001`). The agency name is case-insensitive. A couple of field notes: `classification`, `risk_level`, and `lifecycle_status` use each agency's own vocabulary; `is_active` is `null` for CPSC and NHTSA; and `distribution_states` is the agency's free-text prose, separate from the parsed `distribution_state_codes`.",
         "operationId": "get_recall_recalls__source___recall_id__get",
         "parameters": [
           {
@@ -953,7 +953,7 @@
           "products"
         ],
         "summary": "Search recalled products by keyword (full-text) or exact identifier.",
-        "description": "Searches recalled products. Keyword (`q`) is a Postgres full-text search over product name, description, recall title, and firm name, ranked by relevance (`rank`); token/prefix matching only, NO fuzzy/typo search. Identifier (`hin`, `model`) are exact matches. `upc` is matched at the RECALL level via containment (the per-product UPC field is empty), so each hit carries `upc_is_recall_level: true` — a miss means no recall lists that UPC, not that the product was never recalled. Supply at least one of q, hin, model, upc (else 422). Precedence when several given: q > hin/model > upc. `source` AND-s any path and accepts multiple values (repeat or comma-separate) for any-of (OR).",
+        "description": "Search recalled products — \"is my product recalled?\". Keyword (`q`) is a full-text search over product name, description, recall title, and firm, ranked by relevance (`rank`); whole words and prefixes only, no fuzzy or typo search. `hin` and `model` are exact-match lookups. `upc` matches at the recall level, so each hit carries `upc_is_recall_level: true` — a miss means no recall lists that UPC, not that the product is safe. Supply at least one of `q`, `hin`, `model`, or `upc` (otherwise 422); if several are given, `q` wins, then `hin`/`model`, then `upc`. `source` narrows any of these and accepts multiple values (repeat or comma-separate).",
         "operationId": "search_products_products_search_get",
         "parameters": [
           {
@@ -971,10 +971,10 @@
                   "type": "null"
                 }
               ],
-              "description": "Keywords (Postgres websearch).",
+              "description": "Keywords to search for.",
               "title": "Q"
             },
-            "description": "Keywords (Postgres websearch)."
+            "description": "Keywords to search for."
           },
           {
             "name": "hin",
@@ -990,10 +990,10 @@
                   "type": "null"
                 }
               ],
-              "description": "Exact USCG Hull ID.",
+              "description": "Exact Hull ID (USCG boats).",
               "title": "Hin"
             },
-            "description": "Exact USCG Hull ID."
+            "description": "Exact Hull ID (USCG boats)."
           },
           {
             "name": "model",
@@ -1028,13 +1028,13 @@
                   "type": "null"
                 }
               ],
-              "description": "Look up recalled products by 12-digit UPC barcode. Matched at the RECALL level via array containment — CPSC-sourced and sparse (~5% of CPSC recalls; empty for FDA/USDA/NHTSA/USCG). A miss means no recall lists that UPC, **not** that the product is safe.",
+              "description": "Look up recalled products by 12-digit UPC barcode. Matches at the recall level — UPC data is sparse and comes only from CPSC (about 5% of CPSC recalls; absent for FDA, USDA, NHTSA, and USCG). A miss means no recall lists that UPC, **not** that the product is safe.",
               "examples": [
                 "012345678905"
               ],
               "title": "Upc"
             },
-            "description": "Look up recalled products by 12-digit UPC barcode. Matched at the RECALL level via array containment — CPSC-sourced and sparse (~5% of CPSC recalls; empty for FDA/USDA/NHTSA/USCG). A miss means no recall lists that UPC, **not** that the product is safe."
+            "description": "Look up recalled products by 12-digit UPC barcode. Matches at the recall level — UPC data is sparse and comes only from CPSC (about 5% of CPSC recalls; absent for FDA, USDA, NHTSA, and USCG). A miss means no recall lists that UPC, **not** that the product is safe."
           },
           {
             "name": "source",
@@ -1052,10 +1052,10 @@
                   "type": "null"
                 }
               ],
-              "description": "Optional source filter, AND-ed; repeat/comma-separate for any-of (OR).",
+              "description": "Optional agency filter; repeat/comma-separate to match any of several.",
               "title": "Source"
             },
-            "description": "Optional source filter, AND-ed; repeat/comma-separate for any-of (OR)."
+            "description": "Optional agency filter; repeat/comma-separate to match any of several."
           },
           {
             "name": "limit",
@@ -1095,11 +1095,11 @@
             "required": false,
             "schema": {
               "type": "boolean",
-              "description": "Also compute total (extra COUNT).",
+              "description": "Also return the total count (an extra query).",
               "default": false,
               "title": "With Total"
             },
-            "description": "Also compute total (extra COUNT)."
+            "description": "Also return the total count (an extra query)."
           }
         ],
         "responses": {
@@ -1161,8 +1161,8 @@
         "tags": [
           "firms"
         ],
-        "summary": "Fetch a canonical (cross-source) firm profile with its agency registration sidecars.",
-        "description": "One canonical firm — the cross-source cluster, so a maker appearing under several agencies (e.g. Honda under NHTSA and USCG) collapses to a single profile. Includes recall counts, the per-source breakdown (`recalls_by_source`), name variants, and agency registration sidecars: `firm_usda_attributes` (USDA/FSIS), `firm_uscg_attributes` (USCG boat MIC), and `firm_fda_attributes` (FDA FEI). Sidecars have DIFFERENT shapes and any may be empty; CPSC and NHTSA contribute none. `first_recall_at`/`last_recall_at` are null for a firm with no matched recalls. The id is opaque — obtain it from a recall's `firms[].firm_id`.",
+        "summary": "Fetch a firm profile with its agency registration records.",
+        "description": "A single firm, merged across agencies — so a maker that appears under several (e.g. Honda under NHTSA and USCG) shows up as one profile. Includes recall counts, the per-agency breakdown (`recalls_by_source`), name variants, and agency registration records: `firm_usda_attributes` (USDA establishments), `firm_uscg_attributes` (USCG boat builders), and `firm_fda_attributes` (FDA-registered firms). Each set has a different shape and any may be empty; CPSC and NHTSA contribute none. `first_recall_at` and `last_recall_at` are null for a firm with no matched recalls. The id is opaque — get it from a recall's `firms[].firm_id`.",
         "operationId": "get_firm_firms__firm_id__get",
         "parameters": [
           {
@@ -1301,6 +1301,7 @@
           "stats"
         ],
         "summary": "Recall counts per period (month/week/year) per source + 'ALL' rollup.",
+        "description": "Recall counts per period (month, week, or year) for each agency, plus an `ALL` rollup. Periods are dated by when each recall was first announced, falling back to its publish date when no announcement date is on record — so counts can differ from a publish-date view.",
         "operationId": "recalls_by_period_stats_recalls_by_period_get",
         "parameters": [
           {
@@ -1327,10 +1328,10 @@
                   "type": "null"
                 }
               ],
-              "description": "Filter to one feed (incl. the 'ALL' rollup where the fact carries it). Omit for every row. A source absent from a fact returns [].",
+              "description": "Filter to one agency, or `ALL` for the all-agency rollup where available. Omit to get every row; an agency with no data for this stat returns an empty list.",
               "title": "Source"
             },
-            "description": "Filter to one feed (incl. the 'ALL' rollup where the fact carries it). Omit for every row. A source absent from a fact returns []."
+            "description": "Filter to one agency, or `ALL` for the all-agency rollup where available. Omit to get every row; an agency with no data for this stat returns an empty list."
           }
         ],
         "responses": {
@@ -1397,6 +1398,7 @@
           "stats"
         ],
         "summary": "Per-source monthly trend with rolling averages + year-over-year change.",
+        "description": "Per-agency monthly counts with rolling averages and year-over-year change. Months are dated by when each recall was first announced (or its publish date when none is on record).",
         "operationId": "monthly_trend_stats_monthly_trend_get",
         "parameters": [
           {
@@ -1412,10 +1414,10 @@
                   "type": "null"
                 }
               ],
-              "description": "Filter to one feed (incl. the 'ALL' rollup where the fact carries it). Omit for every row. A source absent from a fact returns [].",
+              "description": "Filter to one agency, or `ALL` for the all-agency rollup where available. Omit to get every row; an agency with no data for this stat returns an empty list.",
               "title": "Source"
             },
-            "description": "Filter to one feed (incl. the 'ALL' rollup where the fact carries it). Omit for every row. A source absent from a fact returns []."
+            "description": "Filter to one agency, or `ALL` for the all-agency rollup where available. Omit to get every row; an agency with no data for this stat returns an empty list."
           }
         ],
         "responses": {
@@ -1497,10 +1499,10 @@
                   "type": "null"
                 }
               ],
-              "description": "Filter to one feed (incl. the 'ALL' rollup where the fact carries it). Omit for every row. A source absent from a fact returns [].",
+              "description": "Filter to one agency, or `ALL` for the all-agency rollup where available. Omit to get every row; an agency with no data for this stat returns an empty list.",
               "title": "Source"
             },
-            "description": "Filter to one feed (incl. the 'ALL' rollup where the fact carries it). Omit for every row. A source absent from a fact returns []."
+            "description": "Filter to one agency, or `ALL` for the all-agency rollup where available. Omit to get every row; an agency with no data for this stat returns an empty list."
           }
         ],
         "responses": {
@@ -1582,10 +1584,10 @@
                   "type": "null"
                 }
               ],
-              "description": "Filter to one feed (incl. the 'ALL' rollup where the fact carries it). Omit for every row. A source absent from a fact returns [].",
+              "description": "Filter to one agency, or `ALL` for the all-agency rollup where available. Omit to get every row; an agency with no data for this stat returns an empty list.",
               "title": "Source"
             },
-            "description": "Filter to one feed (incl. the 'ALL' rollup where the fact carries it). Omit for every row. A source absent from a fact returns []."
+            "description": "Filter to one agency, or `ALL` for the all-agency rollup where available. Omit to get every row; an agency with no data for this stat returns an empty list."
           }
         ],
         "responses": {
@@ -1759,10 +1761,10 @@
                   "type": "null"
                 }
               ],
-              "description": "Filter to one feed (incl. the 'ALL' rollup where the fact carries it). Omit for every row. A source absent from a fact returns [].",
+              "description": "Filter to one agency, or `ALL` for the all-agency rollup where available. Omit to get every row; an agency with no data for this stat returns an empty list.",
               "title": "Source"
             },
-            "description": "Filter to one feed (incl. the 'ALL' rollup where the fact carries it). Omit for every row. A source absent from a fact returns []."
+            "description": "Filter to one agency, or `ALL` for the all-agency rollup where available. Omit to get every row; an agency with no data for this stat returns an empty list."
           }
         ],
         "responses": {
@@ -1844,10 +1846,10 @@
                   "type": "null"
                 }
               ],
-              "description": "Filter to one feed (incl. the 'ALL' rollup where the fact carries it). Omit for every row. A source absent from a fact returns [].",
+              "description": "Filter to one agency, or `ALL` for the all-agency rollup where available. Omit to get every row; an agency with no data for this stat returns an empty list.",
               "title": "Source"
             },
-            "description": "Filter to one feed (incl. the 'ALL' rollup where the fact carries it). Omit for every row. A source absent from a fact returns []."
+            "description": "Filter to one agency, or `ALL` for the all-agency rollup where available. Omit to get every row; an agency with no data for this stat returns an empty list."
           }
         ],
         "responses": {
@@ -1913,7 +1915,8 @@
         "tags": [
           "stats"
         ],
-        "summary": "Units recalled per source x unit_category x month (NOT cross-source comparable).",
+        "summary": "Units recalled per agency and unit type, by month (not comparable across agencies).",
+        "description": "Units recalled per agency and unit type, by month. Units come in incomparable kinds (counts, weight, volume), so never add them across kinds or agencies. Months are dated by when each recall was first announced (or its publish date when none is on record).",
         "operationId": "units_stats_units_get",
         "parameters": [
           {
@@ -1929,10 +1932,10 @@
                   "type": "null"
                 }
               ],
-              "description": "Filter to one feed (incl. the 'ALL' rollup where the fact carries it). Omit for every row. A source absent from a fact returns [].",
+              "description": "Filter to one agency, or `ALL` for the all-agency rollup where available. Omit to get every row; an agency with no data for this stat returns an empty list.",
               "title": "Source"
             },
-            "description": "Filter to one feed (incl. the 'ALL' rollup where the fact carries it). Omit for every row. A source absent from a fact returns []."
+            "description": "Filter to one agency, or `ALL` for the all-agency rollup where available. Omit to get every row; an agency with no data for this stat returns an empty list."
           }
         ],
         "responses": {
