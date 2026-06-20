@@ -17,7 +17,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 class UsdaEstablishment(BaseModel):
     """A USDA/FSIS establishment row (firm_usda_attributes, join key establishment_id)."""
 
-    model_config = ConfigDict(from_attributes=True, extra="ignore")
+    model_config = ConfigDict(from_attributes=True, extra="ignore", coerce_numbers_to_str=True)
 
     establishment_id: str
     establishment_name: str | None = None
@@ -41,7 +41,7 @@ class UsdaEstablishment(BaseModel):
 class UscgManufacturer(BaseModel):
     """A USCG boat-manufacturer/MIC row (firm_uscg_attributes, join key mic)."""
 
-    model_config = ConfigDict(from_attributes=True, extra="ignore")
+    model_config = ConfigDict(from_attributes=True, extra="ignore", coerce_numbers_to_str=True)
 
     mic: str
     company_name: str | None = None
@@ -76,11 +76,19 @@ class UscgManufacturer(BaseModel):
     mic_renamed_not_recycled: bool | None = None
     prior_holders: list[str] = Field(default_factory=list)
 
+    @field_validator("prior_holders", mode="before")
+    @classmethod
+    def _none_to_list(cls, v: Any) -> Any:
+        # Silver builds this as to_jsonb(array_remove(...)) -> [] at the silver grain, but the
+        # mart_firm_profile aggregation can re-introduce a NULL; the top-level FirmProfile validator
+        # only covers the sidecar LISTS, not this nested row field. Belt-and-suspenders -> [].
+        return [] if v is None else v
+
 
 class FdaAttributes(BaseModel):
     """An FDA FEI firm row (firm_fda_attributes, join key firm_fei_num cast to text)."""
 
-    model_config = ConfigDict(from_attributes=True, extra="ignore")
+    model_config = ConfigDict(from_attributes=True, extra="ignore", coerce_numbers_to_str=True)
 
     firm_fei_num: int | str  # FEI bigint; asyncpg returns int (the join casts to text)
     firm_legal_nam: str | None = None
