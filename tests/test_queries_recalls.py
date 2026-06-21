@@ -9,7 +9,7 @@ from sqlalchemy.dialects import postgresql
 
 from recalls_api.deps import RecallFilters
 from recalls_api.models.common import DistributionScope, Source
-from recalls_api.pagination import Cursor, published_at_keyset_where
+from recalls_api.pagination import Cursor, date_keyset_where
 from recalls_api.queries import recalls as q
 
 
@@ -38,6 +38,14 @@ def test_list_stmt_no_filters_has_no_where() -> None:
     sql = str(_compiled(q.list_stmt(_no_filters(), None, 10))).upper()
     assert "WHERE" not in sql
     assert "ORDER BY" in sql and "DESC" in sql
+
+
+def test_list_stmt_orders_by_event_date() -> None:
+    # The feed sort key is event_date (announce-recency), not published_at (ADR 0038 §2026-W26).
+    sql = str(_compiled(q.list_stmt(_no_filters(), None, 10))).lower()
+    order_by = sql.split("order by", 1)[1]
+    assert "event_date" in order_by and "desc" in order_by
+    assert "published_at" not in order_by
 
 
 def test_list_stmt_source_filter_binds_value() -> None:
@@ -101,13 +109,14 @@ def test_is_active_filter_uses_equality() -> None:
 
 
 def test_keyset_where_parses_cursor_to_datetime() -> None:
-    expr = published_at_keyset_where(
-        Cursor(("2026-01-01T00:00:00+00:00", "abc"), "p"),
-        q.recall_summary.c.published_at,
+    expr = date_keyset_where(
+        Cursor(("2026-01-01T00:00:00+00:00", "abc"), "e"),
+        "e",
+        q.recall_summary.c.event_date,
         q.recall_summary.c.recall_event_id,
     )
     c = expr.compile(dialect=postgresql.dialect())
-    assert isinstance(c.params["cur_pub"], datetime)
+    assert isinstance(c.params["cur_dt"], datetime)
     assert c.params["cur_id"] == "abc"
 
 

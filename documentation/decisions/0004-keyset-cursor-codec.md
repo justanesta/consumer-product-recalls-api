@@ -1,8 +1,20 @@
 # 0004 - Keyset (seek) pagination: opaque base64url 2-tuple cursor, DESC-then-ASC seek WHERE
 
-**Status:** Accepted (2026-06-15)  /  **Date:** 2026-06-15
+**Status:** Accepted (2026-06-15) | Amended 2026-W26 (event_date list sort)  /  **Date:** 2026-06-15
 
 > Upstream framing: keyset pagination over the gold mart key columns was ratified in pipeline ADR 0024 (`documentation/decisions/0024-serving-layer-api-design.md` in the pipeline repo).
+
+> **Amended 2026-W26 (`fix/announced-index-sort-site`, pipeline ADR 0038 §2026-W26).** Two updates to
+> what is described below: **(1)** the cursor payload carries a leading **sort-kind tag** —
+> `[kind, value, id]` (a kind-tagged 3-tuple, not the bare 2-tuple the title/§2/§6 still describe) — so a
+> cursor minted on one sort path can't be silently replayed on another. **(2)** The **`GET /recalls` list
+> path now sorts on `event_date = coalesce(announced_at, published_at)` (kind `e`), not `published_at`**
+> — the announce-recency feed change. `event_date` is NOT NULL (the ~20 FDA with no announce date fall
+> back to `published_at`), so the keyset stays totally ordered. The product identifier/UPC paths keep
+> `published_at` (kind `p`) — `mart_product_search` has no `event_date`. Both date paths share one
+> `date_keyset_where(cursor, expected_kind, date_col, id_col)` builder (renamed from
+> `published_at_keyset_where`); the FTS paths keep `rank_keyset_where` (kind `r`). The §6 table below is
+> updated; §2/§4's "2-element"/`published_at_keyset_where` wording is the pre-tag/pre-W26 record.
 
 ---
 
@@ -33,12 +45,13 @@ Finally, the cursor is round-tripped through an untrusted client. A tampered or 
 
 5. **Fetch `limit + 1` rows; `has_next = len(rows) > limit`.** The extra row is never returned to the caller; it only drives the `has_next` boolean in `slice_page()`. No `COUNT(*)` is issued unless the caller passes `?with_total=true`. (`slice_page()` in `pagination.py`, `list_stmt()` in `queries/recalls.py`)
 
-6. **Two concrete keyset shapes, no others.**
+6. **Concrete keyset shapes (each cursor tagged with its kind; updated 2026-W26).**
 
-   | Shape | Sort | Used by |
-   |---|---|---|
-   | `(published_at ISO, id)` | `published_at DESC, id ASC` | `recalls.list_stmt`; `products.identifier_stmt`; `products.upc_stmt` |
-   | `(float rank, id)` | `ts_rank_cd DESC, id ASC` | `recalls.search_stmt`; `products.fts_stmt` |
+   | Kind | Shape | Sort | Used by |
+   |---|---|---|---|
+   | `e` | `(event_date ISO, id)` | `event_date DESC, id ASC` | `recalls.list_stmt` |
+   | `p` | `(published_at ISO, id)` | `published_at DESC, id ASC` | `products.identifier_stmt`; `products.upc_stmt` |
+   | `r` | `(float rank, id)` | `ts_rank_cd DESC, id ASC` | `recalls.search_stmt`; `products.fts_stmt` |
 
 ---
 

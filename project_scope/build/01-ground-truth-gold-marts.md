@@ -119,8 +119,11 @@ change.** `source` MUST be uppercase before hashing (storage is uppercase). The 
 
 - **Grain:** one row per `recall_event`. Left joins are to **pre-grouped** rollups (firm_rollup,
   product_rollup, recall_lifecycle 1:1, history_rollup, recall_distribution_area) → **never fan out**.
-- **Indexes:** `UNIQUE(recall_event_id)`; `btree(source, published_at)`; `btree(is_active)`;
-  `btree(classification)`. **No standalone `published_at` index. No `(published_at, recall_event_id)` index.**
+- **Indexes:** `UNIQUE(recall_event_id)`; `btree(source, event_date)`; `btree(is_active)`;
+  `btree(classification)`; plus the **R2 keyset index `(event_date DESC, recall_event_id)`** (pipeline
+  `post_hook`) that backs the default feed sort, and GINs on the geo arrays / `search_vector` / `firms`.
+  *(Pre-W26 this was `btree(source, published_at)` + an R2 keyset on `(published_at DESC, …)`; the feed
+  sort moved to `event_date = coalesce(announced_at, published_at)` — ADR 0038 §2026-W26.)*
 
 | Column | Postgres type | Nullable? | jsonb element shape | Notes |
 |---|---|---|---|---|
@@ -130,8 +133,9 @@ change.** `source` MUST be uppercase before hashing (storage is uppercase). The 
 | `title` | text (inf) | NULLABLE | — | untested; editable field |
 | `recall_reason` | text (inf) | NULLABLE | — | defect narrative |
 | `url` | text (inf) | NULLABLE | — | CPSC/NHTSA may be NULL |
-| `announced_at` | timestamptz (inf) | **NULLABLE by design** | — | ~20 FDA rows NULL; not_null test is severity=warn. Use for recall AGE. Model `| None`. |
-| `published_at` | timestamptz (inf) | **NOT NULL** | — | hard contract date; sort/filter key |
+| `announced_at` | timestamptz (inf) | **NULLABLE by design** | — | ~20 FDA rows NULL; not_null test is severity=warn. Use for recall AGE. Filter axis `announced_after/before`. Model `| None`. |
+| `published_at` | timestamptz (inf) | **NOT NULL** | — | hard contract date; last-published; filter axis `published_after/before` (was the sort key pre-W26) |
+| `event_date` | timestamptz (inf) | **NOT NULL** | — | `coalesce(announced_at, published_at)`; the feed **sort/keyset key** (ADR 0038 §2026-W26); non-null so keyset is total-ordered |
 | `classification` | text (inf) | NULLABLE | — | source-native (see enum table); btree-indexed |
 | `risk_level` | text (inf) | NULLABLE | — | USDA-only |
 | `lifecycle_status` | text (inf) | NULLABLE | — | NULL for CPSC/NHTSA |
@@ -166,12 +170,12 @@ change.** `source` MUST be uppercase before hashing (storage is uppercase). The 
 `is_active`, `is_currently_active`, `was_ever_retracted` (and the array geo columns).
 
 **Keyset sort keys:**
-- `(published_at DESC, recall_event_id)` — the natural list order. **⚠️ NOT index-backed when
-  unfiltered:** the only `published_at`-bearing index is the composite `(source, published_at)`, which
-  the planner can only use for ordering when a leading `source` equality/range is present. An
-  **unfiltered** `ORDER BY published_at DESC` falls to a full sort. **Index-backed only when
-  `?source=` is also supplied.** Document this; accept the sort cost at corpus scale, or always
-  require/encourage a `source` filter for deep pagination.
+- `(event_date DESC, recall_event_id)` — the natural list order (announce-recency; ADR 0038 §2026-W26).
+  Index-backed even when **unfiltered** by the R2 keyset index `(event_date DESC, recall_event_id)`
+  (pipeline `post_hook`); a leading `?source=` can instead ride the `(source, event_date)` composite.
+  `event_date = coalesce(announced_at, published_at)` is NOT NULL, so the keyset is totally ordered (a
+  raw nullable `announced_at` key would mis-order NULLs and break the seek). The API cursor is tagged
+  `e` for this path (vs `p` for the product `published_at` paths).
 - Point lookup `recall_event_id` (UNIQUE) — for detail.
 - Equality filters `is_active`, `classification` are each single-column btree-backed.
 

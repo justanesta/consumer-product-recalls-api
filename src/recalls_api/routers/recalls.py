@@ -17,9 +17,10 @@ from recalls_api.queries import recalls as rq
 router = APIRouter(prefix="/recalls", tags=["recalls"])
 
 _LIST_DESC = (
-    "Recalls across all five agencies, newest first (by when each was most recently published or "
-    "updated), with cursor pagination. Pass a page's `next_cursor` back as `cursor` for the next "
-    "page. Filters combine with AND across fields; the categorical ones (`source`, "
+    "Recalls across all five agencies, newest first (by `event_date` — when each recall was "
+    "announced, falling back to its published date for the few with no announcement date), with "
+    "cursor pagination. Pass a page's `next_cursor` back as `cursor` for the next page. Filters "
+    "combine with AND across fields; the categorical ones (`source`, "
     "`classification`, `lifecycle_status`, `distribution_scope`, `distribution_state`, "
     "`distribution_country`) accept multiple values: repeat the param or comma-separate them "
     "(`?source=CPSC,FDA`) to match any of them within that field. Each filter notes its own "
@@ -57,7 +58,7 @@ async def list_recalls(
     page_rows, has_next = slice_page(rows, page.limit)
     next_cursor = (
         Cursor(
-            (page_rows[-1]["published_at"].isoformat(), page_rows[-1]["recall_event_id"]), "p"
+            (page_rows[-1]["event_date"].isoformat(), page_rows[-1]["recall_event_id"]), "e"
         ).encode()
         if has_next and page_rows
         else None

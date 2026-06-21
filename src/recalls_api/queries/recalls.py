@@ -15,7 +15,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.sql.elements import ColumnElement
 
 from recalls_api.deps import RecallFilters
-from recalls_api.pagination import Cursor, published_at_keyset_where, rank_keyset_where
+from recalls_api.pagination import Cursor, date_keyset_where, rank_keyset_where
 
 # Lightweight table literal (no reflection/ORM). Column names per 01 — Mart 1 (authoritative).
 recall_summary = sa.table(
@@ -28,6 +28,8 @@ recall_summary = sa.table(
     sa.column("url", sa.Text),
     sa.column("announced_at", sa.TIMESTAMP(timezone=True)),
     sa.column("published_at", sa.TIMESTAMP(timezone=True)),
+    # coalesce(announced_at, published_at); the feed sort key (ADR 0038 §2026-W26)
+    sa.column("event_date", sa.TIMESTAMP(timezone=True)),
     sa.column("classification", sa.Text),
     sa.column("risk_level", sa.Text),
     sa.column("lifecycle_status", sa.Text),
@@ -64,6 +66,7 @@ _LIST_COLS = (
     recall_summary.c.url,
     recall_summary.c.announced_at,
     recall_summary.c.published_at,
+    recall_summary.c.event_date,
     recall_summary.c.classification,
     recall_summary.c.risk_level,
     recall_summary.c.lifecycle_status,
@@ -176,10 +179,14 @@ def recalls_predicates(filters: RecallFilters) -> list[ColumnElement[bool]]:
 
 
 def list_stmt(filters: RecallFilters, cursor: Cursor | None, limit: int) -> Select:
-    """Keyset list. ORDER BY published_at DESC, recall_event_id ASC; fetch limit+1 for has_next.
+    """Keyset list. ORDER BY event_date DESC, recall_event_id ASC; fetch limit+1 for has_next.
 
-    The (published_at DESC, recall_event_id) sort is index-backed by the gold-readiness R2 index of
-    the same shape (applied upstream); a leading ?source= can instead use (source, published_at).
+    event_date = coalesce(announced_at, published_at) is the non-null announce-recency sort key
+    (gold ADR 0038 §2026-W26): the feed is newest-first by when each recall was *announced*, not
+    last published — a long-dormant recall with one minor agency edit no longer outranks newer ones.
+    The (event_date DESC, recall_event_id) sort is index-backed by the gold-readiness R2 index of
+    the same shape (upstream); a leading ?source= can instead use (source, event_date). The cursor
+    is tagged 'e' (vs the product paths' 'p') so the two can't be cross-replayed.
     """
     stmt = sa.select(*_LIST_COLS)
     conds = recalls_predicates(filters)
@@ -187,12 +194,12 @@ def list_stmt(filters: RecallFilters, cursor: Cursor | None, limit: int) -> Sele
         stmt = stmt.where(*conds)
     if cursor is not None:
         stmt = stmt.where(
-            published_at_keyset_where(
-                cursor, recall_summary.c.published_at, recall_summary.c.recall_event_id
+            date_keyset_where(
+                cursor, "e", recall_summary.c.event_date, recall_summary.c.recall_event_id
             )
         )
     return stmt.order_by(
-        recall_summary.c.published_at.desc(), recall_summary.c.recall_event_id.asc()
+        recall_summary.c.event_date.desc(), recall_summary.c.recall_event_id.asc()
     ).limit(limit + 1)
 
 

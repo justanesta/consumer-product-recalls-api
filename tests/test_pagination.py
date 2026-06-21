@@ -15,7 +15,7 @@ from recalls_api.models.common import Page
 from recalls_api.pagination import (
     Cursor,
     build_page,
-    published_at_keyset_where,
+    date_keyset_where,
     rank_keyset_where,
     slice_page,
 )
@@ -28,10 +28,13 @@ def _token(payload: object) -> str:
 
 
 def test_cursor_roundtrip_preserves_kind() -> None:
+    e = Cursor(("2026-01-01T00:00:00+00:00", "abc123"), "e")
     p = Cursor(("2026-01-01T00:00:00+00:00", "abc123"), "p")
     r = Cursor((0.5732, "abc123"), "r")
+    assert Cursor.decode(e.encode()) == e
     assert Cursor.decode(p.encode()) == p
     assert Cursor.decode(r.encode()) == r
+    assert Cursor.decode(e.encode()).kind == "e"
     assert Cursor.decode(r.encode()).kind == "r"
 
 
@@ -44,7 +47,7 @@ _value = st.one_of(
 )
 
 
-@given(st.lists(_value, min_size=2, max_size=2), st.sampled_from(["p", "r"]))
+@given(st.lists(_value, min_size=2, max_size=2), st.sampled_from(["e", "p", "r"]))
 def test_cursor_roundtrip_property(values: list[object], kind: str) -> None:
     decoded = Cursor.decode(Cursor(tuple(values), kind).encode())  # type: ignore[arg-type]
     assert list(decoded.values) == values
@@ -82,19 +85,36 @@ def test_cursor_wrong_shape_or_kind_raises_bad_cursor(payload: object) -> None:
         Cursor.decode(_token(payload))
 
 
-def test_published_at_keyset_rejects_rank_cursor() -> None:
-    # Cross-path replay: a rank ('r') cursor on the published_at seek builder -> BadCursor, not a
+def test_date_keyset_rejects_rank_cursor() -> None:
+    # Cross-path replay: a rank ('r') cursor on the date seek builder -> BadCursor, not a
     # float-bound-as-timestamptz 5xx.
     with pytest.raises(BadCursor):
-        published_at_keyset_where(
-            Cursor((0.5, "abc"), "r"), sa.column("published_at"), sa.column("id")
+        date_keyset_where(Cursor((0.5, "abc"), "r"), "e", sa.column("event_date"), sa.column("id"))
+
+
+def test_date_keyset_rejects_cross_date_kind() -> None:
+    # The two date paths share the builder but carry distinct tags: a products 'p' cursor on the
+    # recalls 'e' path (and vice versa) must 400 -- a /recalls cursor can't seek /products' column.
+    with pytest.raises(BadCursor):
+        date_keyset_where(
+            Cursor(("2026-01-01T00:00:00+00:00", "abc"), "p"),
+            "e",
+            sa.column("event_date"),
+            sa.column("id"),
+        )
+    with pytest.raises(BadCursor):
+        date_keyset_where(
+            Cursor(("2026-01-01T00:00:00+00:00", "abc"), "e"),
+            "p",
+            sa.column("published_at"),
+            sa.column("id"),
         )
 
 
-def test_rank_keyset_rejects_published_at_cursor() -> None:
+def test_rank_keyset_rejects_date_cursor() -> None:
     with pytest.raises(BadCursor):
         rank_keyset_where(
-            Cursor(("2026-01-01T00:00:00+00:00", "abc"), "p"), sa.column("rank"), sa.column("id")
+            Cursor(("2026-01-01T00:00:00+00:00", "abc"), "e"), sa.column("rank"), sa.column("id")
         )
 
 

@@ -4,9 +4,14 @@ No DB handle and no I/O — every function is unit-tested without Postgres. The 
 base64url payload ``[kind, sort_value, id]``; a tampered, wrong-shape, or cross-sort-path cursor
 raises ``BadCursor`` (400).
 
-Order shapes (01 keyset sort keys; matches the R2 index ``(published_at DESC, recall_event_id)``).
-Each shape is tagged so a cursor minted on one path cannot be silently replayed on another:
-  - ``kind='p'`` — recalls list / product identifier+UPC paths: ``(published_at DESC, <id> ASC)``
+Order shapes (01 keyset sort keys). Each shape is tagged so a cursor minted on one path cannot be
+silently replayed on another:
+  - ``kind='e'`` — recalls list: ``(event_date DESC, recall_event_id ASC)``, matching the R2 index
+    ``(event_date DESC, recall_event_id)``. ``event_date = coalesce(announced_at, published_at)`` is
+    the non-null announce-recency sort key (gold ADR 0038 §2026-W26); the recalls feed moved off
+    ``published_at`` so a long-dormant recall that got one minor agency edit stops outranking newer.
+  - ``kind='p'`` — product identifier+UPC paths: ``(published_at DESC, id ASC)`` over
+    ``mart_product_search`` (no ``event_date`` there — products stay on the publish key).
   - ``kind='r'`` — recall/product FTS paths: ``(ts_rank_cd DESC, <id> ASC)`` — rank is an app-level
     keyset over the matched set (the GIN serves the ``@@`` match, not the sort).
 
@@ -28,15 +33,17 @@ from sqlalchemy.sql.elements import ColumnElement
 
 from recalls_api.errors import BadCursor
 
-CursorKind = Literal["p", "r"]  # 'p' = published_at (ISO date), 'r' = rank (float)
+# 'e' = event_date (recalls list, ISO), 'p' = published_at (products, ISO), 'r' = rank (float).
+CursorKind = Literal["e", "p", "r"]
 
 
 @dataclass(frozen=True, slots=True)
 class Cursor:
     """The decoded last-row sort tuple plus its sort-kind tag.
 
-    ``kind='p'`` -> ``(published_at_iso, id)`` for the ``published_at DESC`` paths; ``kind='r'`` ->
-    ``(rank, id)`` for the ``ts_rank_cd DESC`` FTS paths. The tag makes the opaque cursor
+    ``kind='e'`` -> ``(event_date_iso, id)`` for the recalls-list ``event_date DESC`` path;
+    ``kind='p'`` -> ``(published_at_iso, id)`` for the product ``published_at DESC`` paths;
+    ``kind='r'`` -> ``(rank, id)`` for the ``ts_rank_cd DESC`` FTS paths. The tag makes the cursor
     self-describing: a cursor minted on one sort path and replayed on another is rejected with
     ``BadCursor`` (400) by the seek-WHERE builder, instead of binding a float as a ``timestamptz``
     (or a date string into a numeric compare) and leaking a 5xx. Payload: ``[kind, value, id]``.
@@ -61,30 +68,35 @@ class Cursor:
         # tag. Guarding shape AND tag here means a wrong-shape or cross-path payload (legacy
         # 2-element, unknown kind) raises BadCursor (400) before a seek-WHERE builder unpacks it —
         # an uncaught crash downstream would leak a 5xx.
-        if not isinstance(payload, list) or len(payload) != 3 or payload[0] not in ("p", "r"):
+        if not isinstance(payload, list) or len(payload) != 3 or payload[0] not in ("e", "p", "r"):
             raise BadCursor("cursor payload has an unexpected shape")
         kind, sort_value, ident = payload
         return cls(values=(sort_value, ident), kind=kind)
 
 
-def published_at_keyset_where(
+def date_keyset_where(
     cursor: Cursor,
-    pub_col: ColumnElement[datetime],
+    expected_kind: CursorKind,
+    date_col: ColumnElement[datetime],
     id_col: ColumnElement[str],
 ) -> ColumnElement[bool]:
-    """Seek WHERE for ``ORDER BY published_at DESC, id ASC``. Bound params only.
+    """Seek WHERE for ``ORDER BY <date_col> DESC, id ASC``. Bound params only.
 
-    The cursor carries published_at as an ISO string (JSON-safe); parse it back to a ``datetime`` so
-    asyncpg binds a ``timestamptz`` (a bare str would fail the timestamptz comparison).
+    Shared by the recalls list (``expected_kind='e'`` over ``event_date``) and the product
+    identifier/UPC paths (``expected_kind='p'`` over ``published_at``) — both keyset on a
+    ``timestamptz``; only the tag + column differ. The cursor carries the date as an ISO string
+    (JSON-safe); parse it back to a ``datetime`` so asyncpg binds a ``timestamptz`` (a bare str
+    would fail the timestamptz comparison).
     """
-    # A rank ('r') cursor here would bind a float as a timestamptz -> 5xx; reject as 400 instead.
-    if cursor.kind != "p":
+    # A wrong-path cursor (e.g. a rank 'r' float, or an 'e' cursor replayed on the 'p' product path)
+    # would bind the wrong type / seek the wrong column -> 5xx; reject as 400 instead.
+    if cursor.kind != expected_kind:
         raise BadCursor("pagination cursor is not valid for this sort order")
-    cur_pub_raw, cur_id = cursor.values
-    cur_pub = datetime.fromisoformat(cur_pub_raw) if isinstance(cur_pub_raw, str) else cur_pub_raw
-    p = sa.bindparam("cur_pub", cur_pub, type_=sa.TIMESTAMP(timezone=True))
+    cur_dt_raw, cur_id = cursor.values
+    cur_dt = datetime.fromisoformat(cur_dt_raw) if isinstance(cur_dt_raw, str) else cur_dt_raw
+    d = sa.bindparam("cur_dt", cur_dt, type_=sa.TIMESTAMP(timezone=True))
     i = sa.bindparam("cur_id", cur_id, type_=sa.Text())
-    return sa.or_(pub_col < p, sa.and_(pub_col == p, id_col > i))
+    return sa.or_(date_col < d, sa.and_(date_col == d, id_col > i))
 
 
 def rank_keyset_where(
@@ -93,7 +105,7 @@ def rank_keyset_where(
     id_col: ColumnElement[str],
 ) -> ColumnElement[bool]:
     """Seek WHERE for ``ts_rank_cd DESC, recall_product_id ASC`` (app-level over the match)."""
-    # A published_at ('p') cursor here would compare a date string numerically -> 5xx; 400 instead.
+    # A date ('e'/'p') cursor here would compare a date string numerically -> 5xx; 400 instead.
     if cursor.kind != "r":
         raise BadCursor("pagination cursor is not valid for this sort order")
     cur_rank, cur_id = cursor.values
