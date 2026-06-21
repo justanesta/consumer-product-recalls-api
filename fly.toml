@@ -16,7 +16,7 @@ primary_region = "iad"
   force_https = true
   auto_stop_machines = "stop"
   auto_start_machines = true
-  min_machines_running = 0  # scale-to-zero; raise to 1 (within free hours) to drop the app cold start
+  min_machines_running = 1  # keep 1 machine always-on (~$2/mo: 1x shared-256MB 24/7) to drop the cold start
 
   [http_service.concurrency]
     type = "requests"
