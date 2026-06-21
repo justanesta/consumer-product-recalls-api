@@ -251,11 +251,14 @@ insert into mart_firm_profile (
 ('11111111111111111111111111111111', 'Globex Corporation', 'globex', '["Globex Corporation"]',
  '[]', '[]', 1, 0, '2026-06-01 10:00:00+00', '2026-06-01 10:00:00+00',
  '["manufacturer"]', '{"CPSC": 1}', 1, null, null, null),
--- Tyson Foods — USDA only, USDA sidecar populated
+-- Tyson Foods — USDA only, USDA sidecar populated. zip/fips_code are JSON NUMBERS and dbas/activities
+-- are JSON ARRAYS on purpose: the FSIS establishment directory delivers those fields as jsonb arrays
+-- after the 2026-06 USDA API change, which 500'd /firms/{id} for USDA firms even after the numeric
+-- coerce fix (the str-typed model fields must collapse arrays to CSV).
 ('22222222222222222222222222222222', 'Tyson Foods', 'tyson foods', '["Tyson Foods"]',
  '["M12345"]', '[]', 1, 0, '2026-04-15 08:00:00+00', '2026-04-15 08:00:00+00',
  '["establishment"]', '{"USDA": 1}', 1,
- '[{"establishment_id": "M12345", "establishment_name": "TYSON FOODS", "city": "Springdale", "state": "AR", "zip": 72762, "fips_code": 5007, "status_regulated_est": ""}]',
+ '[{"establishment_id": "M12345", "establishment_name": "TYSON FOODS", "city": "Springdale", "state": "AR", "zip": 72762, "fips_code": 5007, "dbas": ["TYSON", "TYSON FOODS"], "activities": ["Slaughter", "Processing"], "status_regulated_est": ""}]',
  null, null),
 -- Boaty Mfg — USCG only, USCG sidecar populated. zip is a JSON NUMBER and prior_holders is JSON
 -- null on purpose: the real mart JSONB carries numeric zips and can re-introduce a null array, which
