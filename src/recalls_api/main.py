@@ -29,15 +29,21 @@ from recalls_api.routers import firms, health, products, recalls, stats
 from recalls_api.settings import get_settings
 
 _DESCRIPTION = (
-    "Open, read-only API for US consumer product recalls from five agencies (CPSC, FDA, USDA, "
-    "NHTSA, USCG). No key, GET-only, cursor-paginated. A few things worth knowing up front: a "
-    "recall's `is_active` flag is `null` (not false) for CPSC and NHTSA, which don't track an "
-    "open/closed status; `classification` uses each agency's own severity scale and can't be "
-    "compared across agencies; UPC search matches a whole recall, not an individual product; and "
-    "search is exact, so a typo finds nothing."
-    "\n\n**Common lookups:** by product name → `GET /products/search?q=`; by **UPC barcode** → "
-    "`GET /products/search?upc=`; vehicle or boat by identifier → `GET /products/search?model=` / "
-    "`?hin=`; a single recall → `GET /recalls/{source}/{recall_id}`."
+    "The consumer product recalls data on this site are also available via API that is available "
+    "for good-faith use. It's open and read-only: no key, GET requests only, and open CORS. "
+    "It's limited to 60 requests a minute per IP, and results are cursor-paginated. "
+    "The base URL is `https://api.consumer-product-recalls.info`."
+    "\n\n"
+    "A few things are worth knowing first. A recall's `is_active` flag is `null` rather than false "
+    "for CPSC and NHTSA, since neither tracks an open or closed status. `classification` uses each "
+    "agency's own severity scale, so the codes don't translate across agencies. UPC search matches "
+    "a whole recall, not a single product. And search is exact, so a typo turns up nothing."
+    "\n\n"
+    "**Common lookups**\n\n"
+    "- By product name: `GET /products/search?q=`\n"
+    "- By UPC barcode: `GET /products/search?upc=`\n"
+    "- A vehicle or boat by identifier: `GET /products/search?model=` or `?hin=`\n"
+    "- A single recall: `GET /recalls/{source}/{recall_id}`"
 )
 
 
