@@ -129,10 +129,18 @@ def recall_filters(
         ),
     ] = None,
     published_after: Annotated[
-        date | None, Query(description="Inclusive, from the start of that day (UTC).")
+        date | None,
+        Query(
+            description="By last-published date: inclusive, from the start of that day (UTC). The "
+            "feed sorts by announcement date — use `announced_after` to filter on that axis."
+        ),
     ] = None,
     published_before: Annotated[
-        date | None, Query(description="Inclusive, through the end of that day (UTC).")
+        date | None,
+        Query(
+            description="By last-published date: inclusive, through the end of that day (UTC). The "
+            "feed sorts by announcement date — use `announced_before` to filter on that axis."
+        ),
     ] = None,
     firm: Annotated[
         str | None,

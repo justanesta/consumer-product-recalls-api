@@ -132,13 +132,20 @@ async def list_recalls(
 | `is_active` | `is_active` (tri-state) | `btree(is_active)` | `is_active = :is_active` (NULL rows excluded by design) |
 | `published_after/before` | `published_at` (NOT NULL) | `(source, published_at)` only when `source` leads; else range-scan/sort | `published_at >= :published_after::date` / `published_at < (:published_before::date + INTERVAL '1 day')` |
 | `firm` | `primary_firm_name` | **none** (seq filter) | `primary_firm_name ILIKE '%'\|\|:firm\|\|'%'` |
-| ordering | `(published_at, recall_event_id)` | index-backed **only** when `source` present | `ORDER BY published_at DESC, recall_event_id DESC` |
+| ordering | `(event_date, recall_event_id)` | index-backed by the R2 keyset index | `ORDER BY event_date DESC, recall_event_id ASC` |
 
-**Ordering & pagination.** Always `ORDER BY published_at DESC, recall_event_id DESC` (deterministic
-tiebreak; `recall_event_id` is UNIQUE/NOT NULL). Keyset: decode `cursor` → `(published_at,
-recall_event_id)`; append `WHERE (published_at, recall_event_id) < (:c_pub, :c_id)`; fetch `limit + 1`;
-if `len > limit`, pop the extra and set `next_cursor = encode(last_kept)`, else `next_cursor = None`.
-`total` is `None` unless `with_total=true` (then one extra `COUNT(*)` over the same `WHERE`).
+> **⚠️ Updated 2026-W26 (ADR 0038 §2026-W26).** The feed sort moved from `published_at` to
+> `event_date = coalesce(announced_at, published_at)` (announce-recency). The rows below originally said
+> `published_at`; the live builder (`queries/recalls.py`) and `openapi.json` are authoritative.
+
+**Ordering & pagination.** Always `ORDER BY event_date DESC, recall_event_id ASC` (deterministic
+tiebreak; `recall_event_id` is UNIQUE/NOT NULL). `event_date = coalesce(announced_at, published_at)` is
+NOT NULL, so the keyset is totally ordered. Keyset: decode `cursor` → `(event_date, recall_event_id)`;
+append `WHERE event_date < :c_dt OR (event_date = :c_dt AND recall_event_id > :c_id)` (DESC-then-ASC
+can't use a plain row-value `<`); fetch `limit + 1`; if `len > limit`, pop the extra and set
+`next_cursor = encode(last_kept)`, else `next_cursor = None`. The cursor is tagged `e` (vs the product
+paths' `p`) so the two can't be cross-replayed. `total` is `None` unless `with_total=true` (then one
+extra `COUNT(*)` over the same `WHERE`).
 
 **Date-range boundary semantics (decision 4; identical in 04's `queries/recalls.py` builder).** The
 filter params are **calendar dates** compared against a **`timestamptz`** column, so a bare `<=`/`<`
@@ -148,25 +155,25 @@ against the date would silently drop same-day rows (e.g. `published_at <= '2026-
 - `published_before` → `published_at < (:published_before::date + INTERVAL '1 day')` (inclusive of the
   **ENTIRE** `published_before` calendar day).
 
-> **⚠️ The single most important caveat (02 blocker).** There is **no standalone `published_at` index
-> and no `(published_at, recall_event_id)` index** — only the composite `btree(source, published_at)`.
-> So an **unfiltered** `GET /recalls` (`ORDER BY published_at DESC`) is a **full sort**, not an index
-> seek; it is index-backed only when `?source=` (an equality on the composite's leading column) is
-> supplied. The keyset cursor still works correctly when unfiltered — it just is not index-accelerated.
-> This is acceptable at corpus scale (tens of thousands of rows; see 02), but the OpenAPI copy must say
-> so and steer deep pagination behind `?source=`. **Do not** claim the composite backs an unfiltered sort.
+> **⚠️ Index note (updated 2026-W26).** As of the serving-layer build the unfiltered feed **is**
+> index-backed: the pipeline creates the R2 keyset index `(event_date DESC, recall_event_id)` via a
+> `post_hook`, and a `(source, event_date)` composite backs the `?source=`-filtered sort. (This
+> supersedes the original 02-era caveat that there was no keyset index and an unfiltered
+> `ORDER BY published_at DESC` fell to a full sort.) The keyset cursor works correctly either way; deep
+> unfiltered pagination is now index-accelerated, not just acceptable at corpus scale.
 
 **OpenAPI copy (verbatim `description=`):**
 
-> Returns recalls across CPSC, FDA, USDA, NHTSA, and USCG, newest first
-> (`published_at DESC`), with keyset (seek) pagination — pass the `next_cursor` from the previous page
-> back as `cursor`. **Caveats carried from the data:** (1) `classification` is **source-native and not a
-> unified enum** — FDA uses `1`/`2`/`3`/`NC`, USDA uses `Class I`/`Class II`/`Class III`/`Public Health Alert`, USCG uses `H`/`L`/`M`/`S`, and
+> Returns recalls across CPSC, FDA, USDA, NHTSA, and USCG, newest first by `event_date`
+> (`coalesce(announced_at, published_at) DESC` — when each recall was announced, falling back to its
+> published date for the few with none), with keyset (seek) pagination — pass the `next_cursor` from the
+> previous page back as `cursor`. **Caveats carried from the data:** (1) `classification` is
+> **source-native and not a unified enum** — FDA uses `1`/`2`/`3`/`NC`, USDA uses `Class I`/`Class II`/`Class III`/`Public Health Alert`, USCG uses `H`/`L`/`M`/`S`, and
 > CPSC/NHTSA have none; `?classification=` is an **exact-string equality** whose meaning depends on the
 > source you also filter by. (2) `is_active` is **tri-state**: CPSC and NHTSA recalls carry no lifecycle
-> status (`null`) and therefore match **neither** `is_active=true` nor `is_active=false`. (3) **Deep,
-> unfiltered pagination is more expensive than it looks** — only `(source, published_at)` is indexed, so
-> ordering by date across all sources is a full sort; add `?source=` for index-backed paging. (4)
+> status (`null`) and therefore match **neither** `is_active=true` nor `is_active=false`. (3) The feed
+> sorts on `event_date`; filter on that axis with `announced_after`/`announced_before`. The separate
+> `published_after`/`published_before` filter on the last-published date. (4)
 > `firm` is an unindexed substring match (`primary_firm_name`); it is a convenience filter, not a search
 > endpoint. Total count is omitted by default; pass `with_total=true` to opt into it.
 

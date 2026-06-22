@@ -16,7 +16,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.sql.elements import ColumnElement
 
 from recalls_api.models.common import Source
-from recalls_api.pagination import Cursor, published_at_keyset_where, rank_keyset_where
+from recalls_api.pagination import Cursor, date_keyset_where, rank_keyset_where
 
 product_search = sa.table(
     "mart_product_search",
@@ -86,10 +86,12 @@ def _tsquery(q: str) -> ColumnElement:
 
 
 def _order_by_published(stmt: Select, cursor: Cursor | None, limit: int) -> Select:
+    # Products stay on published_at ('p'): mart_product_search carries no event_date, and the
+    # announce-recency feed change (ADR 0038 §2026-W26) was scoped to the /recalls list only.
     if cursor is not None:
         stmt = stmt.where(
-            published_at_keyset_where(
-                cursor, product_search.c.published_at, product_search.c.recall_product_id
+            date_keyset_where(
+                cursor, "p", product_search.c.published_at, product_search.c.recall_product_id
             )
         )
     return stmt.order_by(

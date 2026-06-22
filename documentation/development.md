@@ -241,7 +241,7 @@ class MyResource(BaseModel):
 ```python
 # src/recalls_api/queries/my_domain.py
 import sqlalchemy as sa
-from recalls_api.pagination import published_at_keyset_where, slice_page
+from recalls_api.pagination import date_keyset_where, slice_page
 
 _table = sa.table("mart_my_mart", sa.column("id"), sa.column("name"), sa.column("published_at"))
 

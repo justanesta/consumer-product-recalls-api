@@ -14,6 +14,8 @@ def _base_row() -> dict[str, Any]:
         "source": "FDA",
         "source_recall_id": "F-1",
         "published_at": datetime(2026, 5, 1, tzinfo=UTC),
+        # coalesce(announced_at, published_at); non-null feed sort key
+        "event_date": datetime(2026, 5, 1, tzinfo=UTC),
         "distribution_scope": "Nationwide",
     }
 

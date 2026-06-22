@@ -3,7 +3,7 @@
   "info": {
     "title": "Consumer Product Recalls API",
     "description": "The consumer product recalls data on this site are also available via API that is available for good-faith use. It's open and read-only: no key, GET requests only, and open CORS. It's limited to 60 requests a minute per IP, and results are cursor-paginated. The base URL is `https://api.consumer-product-recalls.info`.\n\nA few things are worth knowing first. A recall's `is_active` flag is `null` rather than false for CPSC and NHTSA, since neither tracks an open or closed status. `classification` uses each agency's own severity scale, so the codes don't translate across agencies. UPC search matches a whole recall, not a single product. And search is exact, so a typo turns up nothing.\n\n**Common lookups**\n\n- By product name: `GET /products/search?q=`\n- By UPC barcode: `GET /products/search?upc=`\n- A vehicle or boat by identifier: `GET /products/search?model=` or `?hin=`\n- A single recall: `GET /recalls/{source}/{recall_id}`",
-    "version": "0.1.1"
+    "version": "0.2.0"
   },
   "paths": {
     "/health": {
@@ -66,7 +66,7 @@
           "recalls"
         ],
         "summary": "List recalls, newest first, with filters and pagination.",
-        "description": "Recalls across all five agencies, newest first (by when each was most recently published or updated), with cursor pagination. Pass a page's `next_cursor` back as `cursor` for the next page. Filters combine with AND across fields; the categorical ones (`source`, `classification`, `lifecycle_status`, `distribution_scope`, `distribution_state`, `distribution_country`) accept multiple values: repeat the param or comma-separate them (`?source=CPSC,FDA`) to match any of them within that field. Each filter notes its own caveats below. The total count is omitted unless you pass `with_total=true`.",
+        "description": "Recalls across all five agencies, newest first (by `event_date` — when each recall was announced, falling back to its published date for the few with no announcement date), with cursor pagination. Pass a page's `next_cursor` back as `cursor` for the next page. Filters combine with AND across fields; the categorical ones (`source`, `classification`, `lifecycle_status`, `distribution_scope`, `distribution_state`, `distribution_country`) accept multiple values: repeat the param or comma-separate them (`?source=CPSC,FDA`) to match any of them within that field. Each filter notes its own caveats below. The total count is omitted unless you pass `with_total=true`.",
         "operationId": "list_recalls_recalls_get",
         "parameters": [
           {
@@ -144,10 +144,10 @@
                   "type": "null"
                 }
               ],
-              "description": "Inclusive, from the start of that day (UTC).",
+              "description": "By last-published date: inclusive, from the start of that day (UTC). The feed sorts by announcement date — use `announced_after` to filter on that axis.",
               "title": "Published After"
             },
-            "description": "Inclusive, from the start of that day (UTC)."
+            "description": "By last-published date: inclusive, from the start of that day (UTC). The feed sorts by announcement date — use `announced_after` to filter on that axis."
           },
           {
             "name": "published_before",
@@ -163,10 +163,10 @@
                   "type": "null"
                 }
               ],
-              "description": "Inclusive, through the end of that day (UTC).",
+              "description": "By last-published date: inclusive, through the end of that day (UTC). The feed sorts by announcement date — use `announced_before` to filter on that axis.",
               "title": "Published Before"
             },
-            "description": "Inclusive, through the end of that day (UTC)."
+            "description": "By last-published date: inclusive, through the end of that day (UTC). The feed sorts by announcement date — use `announced_before` to filter on that axis."
           },
           {
             "name": "firm",
@@ -550,10 +550,10 @@
                   "type": "null"
                 }
               ],
-              "description": "Inclusive, from the start of that day (UTC).",
+              "description": "By last-published date: inclusive, from the start of that day (UTC). The feed sorts by announcement date — use `announced_after` to filter on that axis.",
               "title": "Published After"
             },
-            "description": "Inclusive, from the start of that day (UTC)."
+            "description": "By last-published date: inclusive, from the start of that day (UTC). The feed sorts by announcement date — use `announced_after` to filter on that axis."
           },
           {
             "name": "published_before",
@@ -569,10 +569,10 @@
                   "type": "null"
                 }
               ],
-              "description": "Inclusive, through the end of that day (UTC).",
+              "description": "By last-published date: inclusive, through the end of that day (UTC). The feed sorts by announcement date — use `announced_before` to filter on that axis.",
               "title": "Published Before"
             },
-            "description": "Inclusive, through the end of that day (UTC)."
+            "description": "By last-published date: inclusive, through the end of that day (UTC). The feed sorts by announcement date — use `announced_before` to filter on that axis."
           },
           {
             "name": "firm",
@@ -3139,13 +3139,19 @@
               }
             ],
             "title": "Announced At",
-            "description": "When the recall was first announced or initiated. Null for about 20 FDA recalls that have no reliable announcement date; use `published_at` when you need a date that is always present. Sources: all five."
+            "description": "When the recall was first announced or initiated. Null for about 20 FDA recalls that have no reliable announcement date; use `event_date` (or `published_at`) when you need a date that is always present. Filterable via `announced_after`/`announced_before`. Sources: all five."
           },
           "published_at": {
             "type": "string",
             "format": "date-time",
             "title": "Published At",
-            "description": "When the recall was last published or updated. Always present, and the key used for sorting and pagination (unlike `announced_at`, which can be null). For NHTSA this is really a record-creation date, since NHTSA does not publish a last-modified date. Sources: all five."
+            "description": "When the recall was last published or updated — always present. For NHTSA this is really a record-creation date, since NHTSA does not publish a last-modified date. Filterable via `published_after`/`published_before`. This was the default sort key until the feed moved to `event_date` (announce-recency); it is still returned and filterable. Sources: all five."
+          },
+          "event_date": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Event Date",
+            "description": "The recall's effective date for the newest-first feed: its announcement date when known, falling back to `published_at` for the few recalls with no announcement date. Always present, and the key the list is sorted and paginated on. Equals `announced_at` whenever that is set. Sources: all five."
           },
           "classification": {
             "anyOf": [
@@ -3380,6 +3386,7 @@
           "source",
           "source_recall_id",
           "published_at",
+          "event_date",
           "distribution_scope"
         ],
         "title": "RecallDetail",
@@ -3442,13 +3449,19 @@
               }
             ],
             "title": "Announced At",
-            "description": "When the recall was first announced or initiated. Null for about 20 FDA recalls that have no reliable announcement date; use `published_at` when you need a date that is always present. Sources: all five."
+            "description": "When the recall was first announced or initiated. Null for about 20 FDA recalls that have no reliable announcement date; use `event_date` (or `published_at`) when you need a date that is always present. Filterable via `announced_after`/`announced_before`. Sources: all five."
           },
           "published_at": {
             "type": "string",
             "format": "date-time",
             "title": "Published At",
-            "description": "When the recall was last published or updated. Always present, and the key used for sorting and pagination (unlike `announced_at`, which can be null). For NHTSA this is really a record-creation date, since NHTSA does not publish a last-modified date. Sources: all five."
+            "description": "When the recall was last published or updated — always present. For NHTSA this is really a record-creation date, since NHTSA does not publish a last-modified date. Filterable via `published_after`/`published_before`. This was the default sort key until the feed moved to `event_date` (announce-recency); it is still returned and filterable. Sources: all five."
+          },
+          "event_date": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Event Date",
+            "description": "The recall's effective date for the newest-first feed: its announcement date when known, falling back to `published_at` for the few recalls with no announcement date. Always present, and the key the list is sorted and paginated on. Equals `announced_at` whenever that is set. Sources: all five."
           },
           "classification": {
             "anyOf": [
@@ -3566,6 +3579,7 @@
           "source",
           "source_recall_id",
           "published_at",
+          "event_date",
           "distribution_scope",
           "rank"
         ],
@@ -3629,13 +3643,19 @@
               }
             ],
             "title": "Announced At",
-            "description": "When the recall was first announced or initiated. Null for about 20 FDA recalls that have no reliable announcement date; use `published_at` when you need a date that is always present. Sources: all five."
+            "description": "When the recall was first announced or initiated. Null for about 20 FDA recalls that have no reliable announcement date; use `event_date` (or `published_at`) when you need a date that is always present. Filterable via `announced_after`/`announced_before`. Sources: all five."
           },
           "published_at": {
             "type": "string",
             "format": "date-time",
             "title": "Published At",
-            "description": "When the recall was last published or updated. Always present, and the key used for sorting and pagination (unlike `announced_at`, which can be null). For NHTSA this is really a record-creation date, since NHTSA does not publish a last-modified date. Sources: all five."
+            "description": "When the recall was last published or updated — always present. For NHTSA this is really a record-creation date, since NHTSA does not publish a last-modified date. Filterable via `published_after`/`published_before`. This was the default sort key until the feed moved to `event_date` (announce-recency); it is still returned and filterable. Sources: all five."
+          },
+          "event_date": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Event Date",
+            "description": "The recall's effective date for the newest-first feed: its announcement date when known, falling back to `published_at` for the few recalls with no announcement date. Always present, and the key the list is sorted and paginated on. Equals `announced_at` whenever that is set. Sources: all five."
           },
           "classification": {
             "anyOf": [
@@ -3748,6 +3768,7 @@
           "source",
           "source_recall_id",
           "published_at",
+          "event_date",
           "distribution_scope"
         ],
         "title": "RecallSummary",

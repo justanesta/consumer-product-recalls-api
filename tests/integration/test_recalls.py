@@ -287,11 +287,11 @@ async def test_bad_cursor_returns_400(client: AsyncClient) -> None:
 
 
 async def test_cross_path_cursor_replay_returns_400(client: AsyncClient) -> None:
-    # A cursor is sort-path-tagged: replaying a published_at ('p') cursor on the rank-sorted search
-    # endpoint (or a rank ('r') cursor on the published_at list) must be 400, not a 5xx.
-    p_cursor = (await client.get("/recalls", params={"limit": 1})).json()["next_cursor"]
-    assert p_cursor is not None  # 6 seeded recalls -> page 1 of limit 1 has a next cursor
-    bad = await client.get("/recalls/search", params={"q": "acme", "cursor": p_cursor})
+    # A cursor is sort-path-tagged: replaying the list's event_date ('e') cursor on the rank-sorted
+    # search endpoint (or a rank ('r') cursor on the event_date list) must be 400, not a 5xx.
+    e_cursor = (await client.get("/recalls", params={"limit": 1})).json()["next_cursor"]
+    assert e_cursor is not None  # 6 seeded recalls -> page 1 of limit 1 has a next cursor
+    bad = await client.get("/recalls/search", params={"q": "acme", "cursor": e_cursor})
     assert bad.status_code == 400
     assert bad.json()["error"]["type"] == "bad_cursor"
 

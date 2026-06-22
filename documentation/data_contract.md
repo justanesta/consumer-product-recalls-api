@@ -107,8 +107,9 @@ Which of the five agency feeds populates each exposed field. This is the at-a-gl
 | `source_recall_id` | Y | Y | Y | Y | Y | agency-native; FDA = RECALLEVENTID |
 | `title` | Y | Y | Y | Y | Y | native CPSC/USDA; synthesized FDA/NHTSA/USCG |
 | `url` | Y | – | Y | – | Y | FDA/NHTSA carry no per-recall URL |
-| `announced_at` | Y | Y | Y | Y | Y | ~20 FDA events null (≥1940 guard) |
-| `published_at` | Y | Y | Y | Y | Y | coalesced, NOT NULL, the sort key |
+| `announced_at` | Y | Y | Y | Y | Y | ~20 FDA events null (≥1940 guard); filter axis `announced_after/before` |
+| `published_at` | Y | Y | Y | Y | Y | coalesced, NOT NULL; last-published date; filter axis `published_after/before` (was the sort key pre-W26) |
+| `event_date` | Y | Y | Y | Y | Y | `coalesce(announced_at, published_at)`, NOT NULL; the feed **sort/keyset key** (ADR 0038 §2026-W26) |
 | `classification` | – | Y | Y | – | Y | native vocabularies, NOT normalized |
 | `risk_level` | – | – | Y | – | – | USDA-only, derived from classification |
 | `lifecycle_status` | – | Y | Y | – | Y | native vocabularies, NOT normalized |

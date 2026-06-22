@@ -23,6 +23,9 @@ create table mart_recall_summary (
     url                        text,
     announced_at               timestamptz,
     published_at               timestamptz not null,
+    -- event_date = coalesce(announced_at, published_at): the non-null announce-recency feed sort key
+    -- (gold ADR 0038 §2026-W26). Generated here so it mirrors the real mart without touching the INSERTs.
+    event_date                 timestamptz generated always as (coalesce(announced_at, published_at)) stored not null,
     classification             text,
     risk_level                 text,
     lifecycle_status           text,
@@ -53,10 +56,10 @@ create table mart_recall_summary (
     search_vector              tsvector
 );
 
-create index mart_recall_summary_source_published on mart_recall_summary (source, published_at);
+create index mart_recall_summary_source_event_date on mart_recall_summary (source, event_date);
 create index mart_recall_summary_is_active on mart_recall_summary (is_active);
 create index mart_recall_summary_classification on mart_recall_summary (classification);
-create index mart_recall_summary_published_desc_evt on mart_recall_summary (published_at desc, recall_event_id);
+create index mart_recall_summary_event_date_desc_evt on mart_recall_summary (event_date desc, recall_event_id);
 create index mart_recall_summary_sv_gin on mart_recall_summary using gin (search_vector);
 
 insert into mart_recall_summary (

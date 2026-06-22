@@ -1,6 +1,6 @@
 [project]
 name = "consumer-product-recalls-api"
-version = "0.1.1"
+version = "0.2.0"
 description = "Open, read-only FastAPI serving layer over the consumer product recalls gold marts."
 readme = "README.md"
 requires-python = ">=3.12"

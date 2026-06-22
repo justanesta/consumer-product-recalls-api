@@ -42,13 +42,20 @@ _D_URL = (
 )
 _D_ANNOUNCED_AT = (
     "When the recall was first announced or initiated. Null for about 20 FDA recalls that have no "
-    "reliable announcement date; use `published_at` when you need a date that is always present. "
-    "Sources: all five."
+    "reliable announcement date; use `event_date` (or `published_at`) when you need a date that is "
+    "always present. Filterable via `announced_after`/`announced_before`. Sources: all five."
 )
 _D_PUBLISHED_AT = (
-    "When the recall was last published or updated. Always present, and the key used for sorting "
-    "and pagination (unlike `announced_at`, which can be null). For NHTSA this is really a "
-    "record-creation date, since NHTSA does not publish a last-modified date. Sources: all five."
+    "When the recall was last published or updated — always present. For NHTSA this is really a "
+    "record-creation date, since NHTSA does not publish a last-modified date. Filterable via "
+    "`published_after`/`published_before`. This was the default sort key until the feed moved to "
+    "`event_date` (announce-recency); it is still returned and filterable. Sources: all five."
+)
+_D_EVENT_DATE = (
+    "The recall's effective date for the newest-first feed: its announcement date when known, "
+    "falling back to `published_at` for the few recalls with no announcement date. Always present, "
+    "and the key the list is sorted and paginated on. Equals `announced_at` whenever that is set. "
+    "Sources: all five."
 )
 # classification is shared across recalls/products/stats, centralized in models.descriptions so the
 # USCG H/L/M/S caveat can't drift across the three modules.
@@ -113,6 +120,7 @@ class RecallSummary(BaseModel):
     url: str | None = Field(default=None, description=_D_URL)
     announced_at: datetime | None = Field(default=None, description=_D_ANNOUNCED_AT)
     published_at: datetime = Field(description=_D_PUBLISHED_AT)
+    event_date: datetime = Field(description=_D_EVENT_DATE)
     classification: str | None = Field(
         default=None, description=_D_CLASSIFICATION, examples=["Class II"]
     )
@@ -154,6 +162,7 @@ class RecallDetail(BaseModel):
     url: str | None = Field(default=None, description=_D_URL)
     announced_at: datetime | None = Field(default=None, description=_D_ANNOUNCED_AT)
     published_at: datetime = Field(description=_D_PUBLISHED_AT)
+    event_date: datetime = Field(description=_D_EVENT_DATE)
     classification: str | None = Field(default=None, description=_D_CLASSIFICATION)
     risk_level: str | None = Field(default=None, description=_D_RISK_LEVEL)
     lifecycle_status: str | None = Field(default=None, description=_D_LIFECYCLE_STATUS)
