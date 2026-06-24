@@ -196,6 +196,44 @@ General Question. Provenance is currently scattered prose (api-reference caveats
 
 > **Note (2026-06-17):** the inline provenance ground-truth in this item is **superseded** by the empirical [`project_scope/provenance-analysis-2026-06-17.md`](project_scope/provenance-analysis-2026-06-17.md) (e.g. product `model` is **NHTSA-only for real values**; CPSC is empty-string `""`, soon NULL after the pipeline fix). Use the deliverable's matrix as SSOT for the apply; the checkboxes above stand as the original audit pointers.
 
+### Surface recall-detail enrichment fields — `images` / `injuries` / `press_release_url` (cross-repo)
+
+**Goal:** add three single-source fields to `RecallDetail` so the recall page can show CPSC product
+images + injuries and an FDA official press-release link. Part of the cross-repo set added 2026-06-23
+— pipeline `consumer-product-recalls` (TODO "Recall-detail enrichment & source-id lookup") and site
+`consumer-product-recalls-site` (TODO "Recall detail enrichment").
+
+**Dependency — pipeline first.** None of these exist in `mart_recall_summary` today, and the detail
+endpoint reads the whole mart row via `sa.select(recall_summary)` (`queries/recalls.py`), so the mart
+must project them before the API can expose them. `images`/`injuries` are already on silver
+`recall_event` (just unprojected); `press_release_url` needs a mart join to
+`recall_event_press_release`. The mart change + the M:1 press-release grain decision live in the
+pipeline TODO.
+
+**API change (after the mart lands the columns):**
+
+- [ ] Add the columns to the `recall_summary` table mirror in `src/recalls_api/queries/recalls.py` (the
+  `sa.table(...)` def) so the existing `detail_stmt` selects them.
+- [ ] Add fields to `RecallDetail` in `src/recalls_api/models/recalls.py`: `images: list[Any] | None`
+  and `injuries: list[Any] | None` (mirror the existing `hazards` jsonb passthrough), plus
+  `press_release_url` typed per the pipeline grain decision (`list[PressRelease] | None` if aggregated,
+  else `str | None`). Keep all three **out of `RecallSummary`** — detail-only; the list projection
+  stays lean.
+- [ ] Regenerate + commit `openapi.json`; the site then runs `npm run gen:api`.
+
+**Source-native honesty:** `images`/`injuries` are CPSC-only and `press_release_url` FDA-only — null
+elsewhere, consistent with the existing per-source field pattern.
+
+### Recall-ID lookup — note (cross-repo)
+
+The single-value `?source_recall_id=` exact filter **already exists** (`deps.py` +
+`queries/recalls.py:154–157`), so the site can add a Recall-ID search input with **no API change**.
+Two related, separately-tracked items: (1) the pipeline owes a `(source, source_recall_id)` index
+(today the filter is a seq scan) — pipeline TODO; (2) FDA users searching the public `F-####-####`
+number won't hit, because FDA's `source_recall_id` is the internal event id — the fix is the pipeline
+`search_vector` change (pipeline TODO), not here. Multi-value/batch expansion stays in "Bulk
+identifier lookup" above.
+
 ## Performance
 
 ### Stop projecting pipeline-observability fields from the API (audit Q2 / provenance analysis)
